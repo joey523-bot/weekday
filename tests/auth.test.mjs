@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hashPassword, isValidPassword, isValidUsername, normalizeUsername, verifyPassword } from "../functions/_utils/auth.js";
+import { hashPassword, isValidPassword, isValidPhone, normalizePhone, verifyPassword } from "../functions/_utils/auth.js";
 
-test("normalizes and validates account credentials", () => {
-  assert.equal(normalizeUsername("  Week_User  "), "week_user");
-  assert.equal(isValidUsername(normalizeUsername("Week_User")), true);
-  assert.equal(isValidUsername(normalizeUsername("no")), false);
-  assert.equal(isValidUsername(normalizeUsername("name-with-dash")), false);
+test("normalizes and validates phone account credentials", () => {
+  assert.equal(normalizePhone(" 138-0013 8000 "), "13800138000");
+  assert.equal(isValidPhone(normalizePhone("13800138000")), true);
+  assert.equal(isValidPhone(normalizePhone("12800138000")), false);
+  assert.equal(isValidPhone(normalizePhone("1380013800")), false);
   assert.equal(isValidPassword("a secure password"), true);
   assert.equal(isValidPassword("1"), true);
   assert.equal(isValidPassword(""), false);

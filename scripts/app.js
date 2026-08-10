@@ -8,6 +8,7 @@ import {
   getSyncSnapshot,
   getState,
   replaceSyncedData,
+  setNickname,
   setReminderFilter,
   setReminderCompletion,
   selectCustomTheme,
@@ -32,6 +33,7 @@ import {
 import {
   changeAccountPassword,
   getAccountSession,
+  identifyAccount,
   loadAccountSnapshot,
   loginAccount,
   logoutAccount,
@@ -115,64 +117,80 @@ async function startApplication(root) {
 }
 
 function bindAuthEvents(root) {
+  const startForm = root.querySelector("#accountStartForm");
   const loginForm = root.querySelector("#loginForm");
-  const registerForm = root.querySelector("#registerForm");
-  const loginState = root.querySelector("#loginState");
-  const registerState = root.querySelector("#registerState");
-  const authTabs = Array.from(root.querySelectorAll("[data-auth-mode]"));
+  const setupForm = root.querySelector("#accountSetupForm");
+  const stateLabel = root.querySelector("#accountStartState");
+  const phoneInput = root.querySelector("#accountPhoneInput");
+  const phoneLabels = Array.from(root.querySelectorAll("[data-account-phone]"));
+  let pendingPhone = "";
 
-  authTabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const mode = tab.dataset.authMode;
-      const loginActive = mode === "login";
-      loginForm.hidden = !loginActive;
-      registerForm.hidden = loginActive;
-      authTabs.forEach((button) => {
-        const active = button.dataset.authMode === mode;
-        button.classList.toggle("is-active", active);
-        button.setAttribute("aria-selected", String(active));
-      });
-      (loginActive ? root.querySelector("#loginUsername") : root.querySelector("#registerUsername"))?.focus();
-    });
-  });
+  const showStep = (step) => {
+    startForm.hidden = step !== "start";
+    loginForm.hidden = step !== "login";
+    setupForm.hidden = step !== "setup";
+    if (step === "start") phoneInput.focus();
+    if (step === "login") root.querySelector("#loginPassword").focus();
+    if (step === "setup") root.querySelector("#nicknameInput").focus();
+  };
 
-  loginForm.addEventListener("submit", async (event) => {
+  root.querySelectorAll("[data-auth-back]").forEach((button) => button.addEventListener("click", () => showStep("start")));
+
+  startForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    loginState.textContent = "正在登录…";
-    const submit = loginForm.querySelector("button[type=submit]");
+    stateLabel.textContent = "正在确认账号…";
+    const submit = startForm.querySelector("button[type=submit]");
     submit.disabled = true;
     try {
-      const result = await loginAccount({
-        username: root.querySelector("#loginUsername").value,
-        password: root.querySelector("#loginPassword").value
-      });
-      clearAccountData();
-      activeAccount = result.user;
-      await startApplication(root);
+      const result = await identifyAccount(phoneInput.value);
+      pendingPhone = result.phone;
+      phoneLabels.forEach((label) => { label.textContent = pendingPhone; });
+      showStep(result.exists ? "login" : "setup");
+      stateLabel.textContent = "";
     } catch (error) {
-      loginState.textContent = error.message;
+      stateLabel.textContent = error.message;
+    } finally {
       submit.disabled = false;
     }
   });
 
-  registerForm.addEventListener("submit", async (event) => {
+  loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    registerState.textContent = "正在创建账号…";
-    const submit = registerForm.querySelector("button[type=submit]");
+    const state = root.querySelector("#loginState");
+    state.textContent = "正在登录…";
+    const submit = loginForm.querySelector("button[type=submit]");
     submit.disabled = true;
     try {
-      if (root.querySelector("#registerPassword").value !== root.querySelector("#registerPasswordConfirm").value) {
+      const result = await loginAccount({ phone: pendingPhone, password: root.querySelector("#loginPassword").value });
+      clearAccountData();
+      activeAccount = result.user;
+      await startApplication(root);
+    } catch (error) {
+      state.textContent = error.message;
+      submit.disabled = false;
+    }
+  });
+
+  setupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const state = root.querySelector("#setupState");
+    state.textContent = "正在创建账号…";
+    const submit = setupForm.querySelector("button[type=submit]");
+    submit.disabled = true;
+    try {
+      if (root.querySelector("#setupPassword").value !== root.querySelector("#setupPasswordConfirm").value) {
         throw new Error("两次输入的密码不一致");
       }
+      setNickname(root.querySelector("#nicknameInput").value);
       const result = await registerAccount({
-        username: root.querySelector("#registerUsername").value,
-        password: root.querySelector("#registerPassword").value,
+        phone: pendingPhone,
+        password: root.querySelector("#setupPassword").value,
         snapshot: getSyncSnapshot()
       });
       activeAccount = result.user;
       await startApplication(root);
     } catch (error) {
-      registerState.textContent = error.message;
+      state.textContent = error.message;
       submit.disabled = false;
     }
   });
@@ -510,8 +528,10 @@ function renderAll(refs) {
 }
 
 function renderAccountPanel(refs) {
-  refs.accountStatusBadge.textContent = activeAccount?.username ? "已登录" : "未登录";
-  refs.accountUsername.textContent = activeAccount?.username ? `当前账号：${activeAccount.username}` : "--";
+  refs.accountStatusBadge.textContent = activeAccount?.phone ? "已登录" : "未登录";
+  refs.accountUsername.textContent = activeAccount?.phone
+    ? `${getState().preferences.nickname || "我的星期"} · ${activeAccount.phone}`
+    : "--";
 }
 
 function applyTheme(theme) {

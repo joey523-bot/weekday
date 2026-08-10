@@ -5,12 +5,12 @@ const SESSION_TTL_MS = 400 * 24 * 60 * 60 * 1000;
 const PASSWORD_ITERATIONS = 600000;
 const encoder = new TextEncoder();
 
-export function normalizeUsername(value) {
-  return String(value || "").trim().toLowerCase();
+export function normalizePhone(value) {
+  return String(value || "").replace(/[^0-9]/g, "");
 }
 
-export function isValidUsername(value) {
-  return /^[a-z0-9_]{3,24}$/.test(value);
+export function isValidPhone(value) {
+  return /^1[3-9][0-9]{9}$/.test(value);
 }
 
 export function isValidPassword(value) {
@@ -47,7 +47,7 @@ export async function requireSession(context) {
      WHERE s.token_hash = ?1 AND s.expires_at > ?2`
   ).bind(tokenHash, now).first();
   if (!session) return { response: json({ error: "登录已过期，请重新登录" }, { status: 401 }) };
-  return { session, tokenHash, token };
+  return { session: { ...session, phone: session.username }, tokenHash, token };
 }
 
 export async function createSession(context, userId) {
@@ -75,8 +75,8 @@ export async function renewSession(context, tokenHash, token) {
   return sessionCookie(token);
 }
 
-export async function loginBlocked(context, username) {
-  const keys = ["user:" + username, "ip:" + getClientIp(context.request)];
+export async function loginBlocked(context, phone) {
+  const keys = ["phone:" + phone, "ip:" + getClientIp(context.request)];
   const now = Date.now();
   const rows = await context.env.DB.prepare(
     `SELECT key, locked_until FROM auth_rate_limits WHERE key IN (?1, ?2)`
@@ -84,10 +84,10 @@ export async function loginBlocked(context, username) {
   return (rows.results || []).some((row) => new Date(row.locked_until || 0).getTime() > now);
 }
 
-export async function recordFailedLogin(context, username) {
+export async function recordFailedLogin(context, phone) {
   const now = new Date();
   const windowStart = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
-  for (const key of ["user:" + username, "ip:" + getClientIp(context.request)]) {
+  for (const key of ["phone:" + phone, "ip:" + getClientIp(context.request)]) {
     const existing = await context.env.DB.prepare("SELECT failures, window_started_at FROM auth_rate_limits WHERE key = ?").bind(key).first();
     const freshWindow = !existing || new Date(existing.window_started_at).getTime() < new Date(windowStart).getTime();
     const failures = freshWindow ? 1 : Number(existing.failures) + 1;
@@ -100,9 +100,9 @@ export async function recordFailedLogin(context, username) {
   }
 }
 
-export async function clearFailedLogins(context, username) {
+export async function clearFailedLogins(context, phone) {
   await context.env.DB.prepare("DELETE FROM auth_rate_limits WHERE key IN (?1, ?2)")
-    .bind("user:" + username, "ip:" + getClientIp(context.request)).run();
+    .bind("phone:" + phone, "ip:" + getClientIp(context.request)).run();
 }
 
 export async function sha256(value) {

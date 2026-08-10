@@ -70,6 +70,7 @@ export const DEFAULT_STATE = {
   reminders: [],
   preferences: {
     city: "",
+    nickname: "",
     reminderFilter: REMINDER_FILTERS.all,
     theme: DEFAULT_THEME,
     customThemes: [],

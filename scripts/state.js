@@ -197,6 +197,11 @@ export function clearAccountData() {
   persistState();
 }
 
+export function setNickname(nickname) {
+  state.preferences.nickname = String(nickname || "").trim().slice(0, 20);
+  persistState();
+}
+
 export function getSyncSnapshot() {
   return {
     version: 1,
@@ -211,6 +216,7 @@ export function getSyncSnapshot() {
     reminders: state.reminders,
     preferences: {
       reminderFilter: state.preferences.reminderFilter,
+      nickname: state.preferences.nickname,
       theme: state.preferences.theme === "custom" ? DEFAULT_THEME : state.preferences.theme
     },
     updatedAt: new Date().toISOString()
@@ -313,6 +319,7 @@ function normalizePreferences(raw, base) {
     ...(raw || {}),
     theme: requestedTheme === "custom" && !activeCustomThemeId ? DEFAULT_THEME : requestedTheme,
     reminderFilter: normalizeReminderFilter(raw?.reminderFilter),
+    nickname: String(raw?.nickname || "").trim().slice(0, 20),
     customThemes: themes,
     activeCustomThemeId
   };

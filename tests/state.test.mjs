@@ -98,9 +98,11 @@ test("account snapshot includes shared preferences and account clear removes loc
 
   const state = await import(`../scripts/state.js?account=${Date.now()}`);
   state.updateSalary({ amount: "15000", account: "工资卡" });
+  state.setNickname("小明");
   state.setTheme("twinkle");
   const snapshot = state.getSyncSnapshot();
   assert.equal(snapshot.preferences.theme, "twinkle");
+  assert.equal(snapshot.preferences.nickname, "小明");
   assert.equal(snapshot.salary.amount, "15000");
   state.clearAccountData();
   assert.equal(state.getState().salary.amount, "");

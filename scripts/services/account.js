@@ -7,12 +7,16 @@ export async function getAccountSession() {
   return readResponse(response);
 }
 
-export async function registerAccount({ username, password, snapshot }) {
-  return postJson(`${AUTH_BASE}/register`, { username, password, snapshot });
+export async function identifyAccount(phone) {
+  return postJson(`${AUTH_BASE}/identify`, { phone });
 }
 
-export async function loginAccount({ username, password }) {
-  return postJson(`${AUTH_BASE}/login`, { username, password });
+export async function registerAccount({ phone, password, snapshot }) {
+  return postJson(`${AUTH_BASE}/register`, { phone, password, snapshot });
+}
+
+export async function loginAccount({ phone, password }) {
+  return postJson(`${AUTH_BASE}/login`, { phone, password });
 }
 
 export async function logoutAccount() {

@@ -292,35 +292,40 @@ export function createAuthShell() {
     <main class="auth-screen" aria-labelledby="authTitle">
       <section class="auth-screen__intro">
         <div class="auth-brand"><span class="auth-brand__mark"><img src="./assets/icons/app-icon-star-192.png?v=20260810.1" alt="" width="42" height="42" /></span><span>星期</span></div>
-        <p class="auth-screen__eyebrow">你的私人时间本</p>
-        <h1 id="authTitle">把生活的节奏<br /><em>带着走。</em></h1>
-        <p class="auth-screen__lead">发薪日、重要事项和提醒，会跟着你的账号出现在每一台设备上。</p>
+        <p class="auth-screen__eyebrow">先登录，才能开启星期</p>
+        <h1 id="authTitle">把每一天<br /><em>安排明白。</em></h1>
+        <p class="auth-screen__lead">登录后才能记录发薪日、重要事项和提醒；同一账号的数据会自动同步到你的其他设备。</p>
         <ol class="auth-route" aria-label="账号同步流程">
-          <li><span>01</span><div><strong>登录一次</strong><small>打开应用会自动保持登录</small></div></li>
-          <li><span>02</span><div><strong>自动同步</strong><small>修改后会保存到当前账号</small></div></li>
-          <li><span>03</span><div><strong>随时退出</strong><small>退出会清除这台设备的数据</small></div></li>
+          <li><span>01</span><div><strong>输入手机号</strong><small>系统自动判断你的账号状态</small></div></li>
+          <li><span>02</span><div><strong>开始记录</strong><small>新账号设置昵称后即可使用</small></div></li>
+          <li><span>03</span><div><strong>自动同步</strong><small>打开应用会持续保持登录</small></div></li>
         </ol>
       </section>
       <section class="auth-card" aria-label="账号登录与注册">
-        <div class="auth-card__head"><p>账户</p><h2>开始使用</h2></div>
-        <div class="auth-tabs" role="tablist" aria-label="账户操作">
-          <button class="auth-tabs__item is-active" data-auth-mode="login" type="button" role="tab" aria-selected="true" aria-controls="loginForm">登录</button>
-          <button class="auth-tabs__item" data-auth-mode="register" type="button" role="tab" aria-selected="false" aria-controls="registerForm">创建账号</button>
-        </div>
-        <form id="loginForm" class="stack-form auth-form" role="tabpanel">
-          <p class="auth-form__hint">在已使用过的设备上继续。</p>
-          <label class="field"><span class="field__label">用户名</span><input id="loginUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
+        <div class="auth-card__head"><p>开启星期</p><h2>先登录</h2></div>
+        <form id="accountStartForm" class="stack-form auth-form">
+          <p class="auth-form__hint">输入手机号后，我们会自动带你进入登录或创建账号流程。</p>
+          <label class="field"><span class="field__label">手机号</span><input id="accountPhoneInput" class="input" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="请输入 11 位手机号" required /></label>
+          <button class="button button--primary button--block" type="submit">继续</button>
+          <p id="accountStartState" class="form-note" aria-live="polite">不会发送验证码，仅用于识别你的星期账号。</p>
+        </form>
+        <form id="loginForm" class="stack-form auth-form" hidden>
+          <button class="auth-back" data-auth-back type="button">‹ 更换手机号</button>
+          <p class="auth-form__hint">账号已存在，输入密码继续。</p>
+          <p class="auth-phone" data-account-phone>--</p>
           <label class="field"><span class="field__label">密码</span><input id="loginPassword" class="input" type="password" autocomplete="current-password" required /></label>
           <button class="button button--primary button--block" type="submit">进入星期</button>
-          <p id="loginState" class="form-note" aria-live="polite"></p>
+          <p id="loginState" class="form-note" aria-live="polite">密码暂不支持找回。</p>
         </form>
-        <form id="registerForm" class="stack-form auth-form" role="tabpanel" hidden>
-          <p class="auth-form__hint">当前设备的数据会同步到新账号。</p>
-          <label class="field"><span class="field__label">用户名</span><input id="registerUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
-          <label class="field"><span class="field__label">密码</span><input id="registerPassword" class="input" type="password" autocomplete="new-password" required /></label>
-          <label class="field"><span class="field__label">确认密码</span><input id="registerPasswordConfirm" class="input" type="password" autocomplete="new-password" required /></label>
-          <button class="button button--primary button--block" type="submit">创建并开始同步</button>
-          <p id="registerState" class="form-note" aria-live="polite">密码无法找回，请自行保存。</p>
+        <form id="accountSetupForm" class="stack-form auth-form" hidden>
+          <button class="auth-back" data-auth-back type="button">‹ 更换手机号</button>
+          <p class="auth-form__hint">这是第一次使用星期，补充昵称后就可以开始记录。</p>
+          <p class="auth-phone" data-account-phone>--</p>
+          <label class="field"><span class="field__label">昵称</span><input id="nicknameInput" class="input" type="text" maxlength="20" autocomplete="nickname" placeholder="例如：小明" required /></label>
+          <label class="field"><span class="field__label">设置密码</span><input id="setupPassword" class="input" type="password" autocomplete="new-password" required /></label>
+          <label class="field"><span class="field__label">确认密码</span><input id="setupPasswordConfirm" class="input" type="password" autocomplete="new-password" required /></label>
+          <button class="button button--primary button--block" type="submit">创建账号并开启星期</button>
+          <p id="setupState" class="form-note" aria-live="polite">密码暂不支持找回，请自行保存。</p>
         </form>
       </section>
     </main>

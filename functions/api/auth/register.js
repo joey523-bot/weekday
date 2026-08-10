@@ -1,12 +1,12 @@
 import { badRequest, json } from "../../_utils/http.js";
-import { createSession, hashPassword, isValidPassword, isValidUsername, normalizeUsername } from "../../_utils/auth.js";
+import { createSession, hashPassword, isValidPassword, isValidPhone, normalizePhone } from "../../_utils/auth.js";
 
 export async function onRequestPost(context) {
   if (!context.env.DB) return badRequest("缺少 D1 绑定 DB", 503);
   const body = await context.request.json().catch(() => null);
-  const username = normalizeUsername(body?.username);
+  const phone = normalizePhone(body?.phone);
   const password = body?.password;
-  if (!isValidUsername(username)) return badRequest("用户名需为 3–24 位字母、数字或下划线");
+  if (!isValidPhone(phone)) return badRequest("请输入正确的 11 位手机号");
   if (!isValidPassword(password)) return badRequest("请输入密码");
   if (!isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
 
@@ -16,15 +16,15 @@ export async function onRequestPost(context) {
   try {
     await context.env.DB.batch([
       context.env.DB.prepare("INSERT INTO users (id, username, password_hash, password_salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-        .bind(userId, username, hash, salt, now, now),
+        .bind(userId, phone, hash, salt, now, now),
       context.env.DB.prepare("INSERT INTO account_sync (user_id, snapshot_data, revision, created_at, updated_at) VALUES (?, ?, 1, ?, ?)")
         .bind(userId, JSON.stringify(body.snapshot), now, now)
     ]);
   } catch (error) {
-    if (String(error.message || "").includes("UNIQUE")) return badRequest("这个用户名已被使用", 409);
+    if (String(error.message || "").includes("UNIQUE")) return badRequest("这个手机号已被使用", 409);
     throw error;
   }
-  return json({ ok: true, user: { username } }, { status: 201, headers: { "Set-Cookie": await createSession(context, userId) } });
+  return json({ ok: true, user: { phone } }, { status: 201, headers: { "Set-Cookie": await createSession(context, userId) } });
 }
 
 function isSnapshot(value) {
