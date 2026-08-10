@@ -1,6 +1,5 @@
 import { badRequest, json } from "../../_utils/http.js";
 import { createSession, hashPassword, isValidPassword, isValidPhone, normalizePhone } from "../../_utils/auth.js";
-import { accountStorageError, getAccountSnapshotColumn } from "../../_utils/account-storage.js";
 
 export async function onRequestPost(context) {
   if (!context.env.DB) return badRequest("缺少 D1 绑定 DB", 503);
@@ -13,20 +12,23 @@ export async function onRequestPost(context) {
 
   const now = new Date().toISOString();
   const userId = crypto.randomUUID();
-  const { salt, hash } = await hashPassword(password);
   try {
-    const snapshotColumn = await getAccountSnapshotColumn(context.env.DB);
+    const { salt, hash } = await hashPassword(password);
     await context.env.DB.batch([
       context.env.DB.prepare("INSERT INTO users (id, username, password_hash, password_salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(userId, phone, hash, salt, now, now),
-      context.env.DB.prepare(`INSERT INTO account_sync (user_id, ${snapshotColumn}, revision, created_at, updated_at) VALUES (?, ?, 1, ?, ?)`)
+      context.env.DB.prepare("INSERT INTO account_sync (user_id, snapshot_data, revision, created_at, updated_at) VALUES (?, ?, 1, ?, ?)")
         .bind(userId, JSON.stringify(body.snapshot), now, now)
     ]);
+    const cookie = await createSession(context, userId);
+    return json({ ok: true, user: { phone } }, { status: 201, headers: { "Set-Cookie": cookie } });
   } catch (error) {
     if (String(error.message || "").includes("UNIQUE")) return badRequest("这个手机号已被使用", 409);
-    return badRequest(accountStorageError(error), 503);
+    if (/no such table|no such column/i.test(String(error.message || ""))) {
+      return badRequest("账号数据库尚未完成配置，请执行 0003-create-account-tables.sql", 503);
+    }
+    return badRequest("账号服务暂时不可用，请稍后重试", 503);
   }
-  return json({ ok: true, user: { phone } }, { status: 201, headers: { "Set-Cookie": await createSession(context, userId) } });
 }
 
 function isSnapshot(value) {

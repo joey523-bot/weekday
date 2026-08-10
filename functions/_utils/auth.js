@@ -2,7 +2,8 @@ import { json } from "./http.js";
 
 const SESSION_COOKIE = "yoyuan_session";
 const SESSION_TTL_MS = 400 * 24 * 60 * 60 * 1000;
-const PASSWORD_ITERATIONS = 600000;
+// Pages Functions 的 CPU 预算有限；10,000 轮仍使用随机盐和 PBKDF2，且可稳定完成注册与登录。
+const PASSWORD_ITERATIONS = 10000;
 const encoder = new TextEncoder();
 
 export function normalizePhone(value) {
