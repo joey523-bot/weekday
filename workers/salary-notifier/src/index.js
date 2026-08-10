@@ -79,10 +79,10 @@ async function processSalaryEntry(entry, env) {
     return;
   }
 
-  const body = buildReminderBody(daysUntil, targetSalary);
+  const reminder = buildReminderCopy(daysUntil, targetSalary);
   const payload = JSON.stringify({
-    title: "发薪提醒",
-    body,
+    title: reminder.title,
+    body: reminder.body,
     tag: `salary-${cycleKey}`,
     url: env.APP_URL || "/"
   });
@@ -156,9 +156,10 @@ async function processReminderEntry(entry, env) {
     return;
   }
 
+  const reminder = buildCustomReminderCopy(entry, Number(entry.lead_days || 0));
   const payload = JSON.stringify({
-    title: entry.title,
-    body: buildCustomReminderBody(entry, Number(entry.lead_days || 0)),
+    title: reminder.title,
+    body: reminder.body,
     tag: `reminder-${entry.reminder_id}-${noticeDate}`,
     url: env.APP_URL || "/"
   });
@@ -317,18 +318,31 @@ function compareParts(left, right) {
   return leftUtc - rightUtc;
 }
 
-function buildReminderBody(daysUntil, targetSalary) {
+function buildReminderCopy(daysUntil, targetSalary) {
   if (daysUntil === 0) {
-    return `今天是发薪日，记得留意 ${targetSalary.month} 月工资到账情况。`;
+    return {
+      title: "今天是发薪日",
+      body: `${targetSalary.month} 月的工资预计今天到账，记得看一眼。`
+    };
   }
 
-  return `${daysUntil} 天后是发薪日，建议提前检查工资卡、账单和自动扣款安排。`;
+  return {
+    title: "发薪日快到了",
+    body: `还有 ${daysUntil} 天发薪，提前看一眼账单和安排。`
+  };
 }
 
-function buildCustomReminderBody(entry, leadDays) {
+function buildCustomReminderCopy(entry, leadDays) {
+  const category = entry.category ? ` · ${entry.category}` : "";
   if (leadDays === 0) {
-    return `今天需要处理：${entry.title}${entry.category ? `（${entry.category}）` : ""}。`;
+    return {
+      title: `今天记得处理「${entry.title}」`,
+      body: `给自己留出的这件事${category}`
+    };
   }
 
-  return `${leadDays} 天后需要处理：${entry.title}${entry.category ? `（${entry.category}）` : ""}。`;
+  return {
+    title: `「${entry.title}」快到了`,
+    body: `还有 ${leadDays} 天，提前留一点时间给它${category}`
+  };
 }

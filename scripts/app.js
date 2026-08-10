@@ -76,6 +76,7 @@ async function boot() {
   const root = document.querySelector("#app");
   const session = await getAccountSession().catch(() => null);
   if (!session?.user) {
+    applyTheme(DEFAULT_THEME);
     root.innerHTML = createAuthShell();
     bindAuthEvents(root);
     return;

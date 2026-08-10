@@ -56,6 +56,11 @@ function jsonHeaders() {
 
 async function readResponse(response) {
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "请求失败");
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 501) {
+      throw new Error("当前是静态预览，账号服务没有启动。请使用 Cloudflare Pages 本地服务，或打开已部署的网站。");
+    }
+    throw new Error(payload.error || "请求失败");
+  }
   return payload;
 }

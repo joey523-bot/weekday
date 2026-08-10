@@ -55,7 +55,20 @@
 
 把 [`cloudflare/d1-schema.sql`](cloudflare/d1-schema.sql) 导入同一个 D1 数据库。
 
-新建数据库时只导入该文件。已有数据库只执行 [`cloudflare/migrations/0002-accounts.sql`](cloudflare/migrations/0002-accounts.sql) 一次；不要在同一个数据库重复执行两份 SQL。
+新建数据库时只导入该文件。已有数据库先执行 [`cloudflare/migrations/0002-accounts.sql`](cloudflare/migrations/0002-accounts.sql) 一次；如果曾出现 `duplicate column name: user_id`，说明推送列已创建，此时只执行 [`cloudflare/migrations/0003-create-account-tables.sql`](cloudflare/migrations/0003-create-account-tables.sql)。
+
+### 本地测试账号功能
+
+不要用 `python -m http.server`、Live Server 或直接双击 `index.html` 测试登录：它们只会提供静态文件，`/api/auth/*` 必然返回 404/501。
+
+在项目根目录执行一次本地建表，再启动 Cloudflare Pages 本地服务：
+
+```bash
+npx wrangler d1 execute DB --local --file=cloudflare/d1-schema.sql
+npx wrangler pages dev . --d1=DB
+```
+
+终端显示的本地网址（通常是 `http://localhost:8788`）才支持注册、登录和同步测试。要测试真实线上 D1，请直接打开 Cloudflare Pages 已部署的网址；不要在静态预览地址测试账号功能。
 
 ### 3. 定时 Worker
 
