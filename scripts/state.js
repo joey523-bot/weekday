@@ -173,11 +173,27 @@ export function replaceSyncedData(payload) {
         leadDays: payload?.salary?.notification?.leadDays ?? state.salary.notification.leadDays
       }
     },
-    reminders: Array.isArray(payload?.reminders) ? payload.reminders : state.reminders
+    reminders: Array.isArray(payload?.reminders) ? payload.reminders : state.reminders,
+    preferences: {
+      ...state.preferences,
+      ...(payload?.preferences || {}),
+      customThemes: state.preferences.customThemes,
+      activeCustomThemeId: state.preferences.activeCustomThemeId
+    }
   });
 
   state.salary = normalized.salary;
   state.reminders = normalized.reminders;
+  state.preferences = normalized.preferences;
+  persistState();
+}
+
+export function clearAccountData() {
+  const next = cloneDefaultState();
+  state.salary = next.salary;
+  state.reminders = next.reminders;
+  state.preferences = next.preferences;
+  state.weather = next.weather;
   persistState();
 }
 
@@ -193,6 +209,10 @@ export function getSyncSnapshot() {
       }
     },
     reminders: state.reminders,
+    preferences: {
+      reminderFilter: state.preferences.reminderFilter,
+      theme: state.preferences.theme === "custom" ? DEFAULT_THEME : state.preferences.theme
+    },
     updatedAt: new Date().toISOString()
   };
 }

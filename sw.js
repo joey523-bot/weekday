@@ -1,4 +1,4 @@
-const APP_VERSION = "20260805.1";
+const APP_VERSION = "20260810.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
@@ -17,8 +17,8 @@ const STATIC_ASSETS = [
   "./scripts/config.js",
   "./scripts/state.js",
   "./scripts/services/calendar.js",
+  "./scripts/services/account.js",
   "./scripts/services/push.js",
-  "./scripts/services/sync.js",
   "./scripts/services/theme.js",
   "./scripts/services/weather.js",
   "./scripts/utils/date.js",
@@ -53,6 +53,9 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+  if (requestUrl.pathname.startsWith("/api/")) {
     return;
   }
 

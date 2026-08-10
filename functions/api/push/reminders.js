@@ -1,7 +1,10 @@
 import { badRequest, json } from "../../_utils/http.js";
 import { normalizeReminderPushRules } from "../../_utils/push.js";
+import { requireSession } from "../../_utils/auth.js";
 
 export async function onRequestPost(context) {
+  const session = await requireSession(context);
+  if (session.response) return session.response;
   if (!context.env.DB) {
     return badRequest("缺少 D1 绑定 DB", 503);
   }
@@ -17,9 +20,9 @@ export async function onRequestPost(context) {
   }
 
   const subscription = await context.env.DB.prepare(
-    "SELECT installation_id FROM salary_push_subscriptions WHERE installation_id = ? AND enabled = 1"
+    "SELECT installation_id FROM salary_push_subscriptions WHERE installation_id = ? AND user_id = ? AND enabled = 1"
   )
-    .bind(payload.installationId)
+    .bind(payload.installationId, session.session.user_id)
     .first();
 
   if (!subscription) {

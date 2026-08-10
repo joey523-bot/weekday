@@ -8,7 +8,7 @@ export function createShell() {
       <header class="app-header">
         <div class="brand-lockup">
           <button class="brand" data-switch-view="overview" type="button" aria-label="返回星期首页">
-            <span class="brand__mark" aria-hidden="true"><img src="./assets/icons/app-icon-star-192.png?v=20260805.1" alt="" width="38" height="38" /></span>
+            <span class="brand__mark" aria-hidden="true"><img src="./assets/icons/app-icon-star-192.png?v=20260810.1" alt="" width="38" height="38" /></span>
             <span>星期</span>
           </button>
           <p id="todayLabel">--</p>
@@ -214,7 +214,7 @@ export function createShell() {
                   <label class="field"><span class="field__label">账户</span><input id="salaryAccountInput" name="salaryAccount" class="input" type="text" placeholder="工资卡" autocomplete="off" /></label>
                 </div>
                 <button class="button button--primary button--block" type="submit">保存发薪设置</button>
-                <p class="form-note">设置会立即保存到当前设备；“刷新应用资源”不会删除它。若在 Safari 中清除网站数据，请使用下方云端备份恢复。</p>
+                <p class="form-note">设置会自动同步到当前账号；“刷新应用资源”不会删除它。</p>
               </form>
             </article>
 
@@ -236,36 +236,36 @@ export function createShell() {
             <article class="journal-card graph-paper form-card cloud-backup-card">
               <div class="card-heading">
                 <div>
-                  <h2>云端备份与恢复</h2>
-                  <p>工资设置和事项会先在本机加密，再保存到 D1；清除浏览器网站数据后可用恢复码找回。</p>
+                  <h2>账号与同步</h2>
+                  <p>登录后，工资设置和事项会自动同步到你的其他设备。</p>
                 </div>
-                <span id="cloudStatusBadge" class="soft-chip">未开启</span>
+                <span id="accountStatusBadge" class="soft-chip">已登录</span>
               </div>
-
-              <div id="recoveryCodeDisplay" class="recovery-code" hidden></div>
-              <p class="cloud-warning">恢复码是唯一钥匙。请保存到密码管理器，不要发给其他人；丢失后无法找回。</p>
-
-              <div class="cloud-actions">
-                <button id="cloudCreateButton" class="button button--primary" type="button">开启云端备份</button>
-                <button id="cloudCopyButton" class="button button--secondary" type="button" hidden>复制恢复码</button>
-                <button id="cloudForgetButton" class="button button--secondary" type="button" hidden>停止此设备同步</button>
-              </div>
-
-              <div class="restore-row">
+              <p id="accountUsername" class="form-note">--</p>
+              <form id="changePasswordForm" class="stack-form">
                 <label class="field">
-                  <span class="field__label">在新设备恢复</span>
-                  <input id="recoveryCodeInput" class="input recovery-code-input" type="text" placeholder="输入已有恢复码" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+                  <span class="field__label">当前密码</span>
+                  <input id="currentPasswordInput" class="input" type="password" autocomplete="current-password" required />
                 </label>
-                <button id="cloudRestoreButton" class="button button--primary" type="button">恢复数据</button>
-              </div>
-              <p id="cloudSyncState" class="form-note">开启后会生成唯一恢复码。</p>
+                <label class="field">
+                  <span class="field__label">新密码</span>
+                  <input id="newPasswordInput" class="input" type="password" minlength="12" autocomplete="new-password" required />
+                </label>
+                <label class="field">
+                  <span class="field__label">确认新密码</span>
+                  <input id="newPasswordConfirmInput" class="input" type="password" minlength="12" autocomplete="new-password" required />
+                </label>
+                <button class="button button--secondary" type="submit">修改密码</button>
+                <p id="changePasswordState" class="form-note" aria-live="polite">密码不支持找回，请妥善保管。</p>
+              </form>
+              <button id="logoutButton" class="button button--danger button--block" type="button">退出登录并清除此设备数据</button>
             </article>
 
             <article class="data-note">
               <span class="data-note__icon">${iconDatabase()}</span>
               <div>
                 <h2>刷新应用资源不会删除设置</h2>
-                <p>这里仅刷新页面代码和图片缓存，不会清除本机数据或通知订阅。Safari 的“清除网站数据”会同时删除本机设置，请先开启云端备份。</p>
+                <p>这里仅刷新页面代码和图片缓存，不会退出登录或关闭提醒。Safari 的“清除网站数据”会清除登录状态。</p>
                 <div class="maintenance-actions">
                   <button id="clearAppCacheButton" class="button button--secondary" type="button">刷新应用资源</button>
                   <span id="appMaintenanceState" class="form-note">遇到页面异常时使用；不会关闭提醒。</span>
@@ -283,6 +283,40 @@ export function createShell() {
         <button class="bottom-tabs__item" data-switch-view="settings" data-tab-button type="button">${iconUser()}<span>我的</span></button>
       </nav>
     </div>
+  `;
+}
+
+export function createAuthShell() {
+  return `
+    <div class="page-noise"></div>
+    <main class="app-shell workspace" aria-labelledby="authTitle">
+      <header class="page-intro">
+        <div class="section-kicker"><span>星期</span><span class="section-kicker__line"></span></div>
+        <h1 id="authTitle">登录后开始同步</h1>
+        <p>在不同设备登录同一账号，即可自动同步工资和事项。</p>
+      </header>
+      <section class="settings-grid">
+        <article class="journal-card graph-paper form-card">
+          <div class="card-heading"><div><h2>登录</h2><p>密码不支持找回，请妥善保管。</p></div></div>
+          <form id="loginForm" class="stack-form">
+            <label class="field"><span class="field__label">用户名</span><input id="loginUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
+            <label class="field"><span class="field__label">密码</span><input id="loginPassword" class="input" type="password" minlength="12" autocomplete="current-password" required /></label>
+            <button class="button button--primary button--block" type="submit">登录</button>
+            <p id="loginState" class="form-note" aria-live="polite"></p>
+          </form>
+        </article>
+        <article class="journal-card graph-paper form-card">
+          <div class="card-heading"><div><h2>创建账号</h2><p>用户名只能使用字母、数字和下划线。</p></div></div>
+          <form id="registerForm" class="stack-form">
+            <label class="field"><span class="field__label">用户名</span><input id="registerUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
+            <label class="field"><span class="field__label">密码</span><input id="registerPassword" class="input" type="password" minlength="12" autocomplete="new-password" required /></label>
+            <label class="field"><span class="field__label">确认密码</span><input id="registerPasswordConfirm" class="input" type="password" minlength="12" autocomplete="new-password" required /></label>
+            <button class="button button--secondary button--block" type="submit">创建账号</button>
+            <p id="registerState" class="form-note" aria-live="polite">会同步当前设备上的数据。</p>
+          </form>
+        </article>
+      </section>
+    </main>
   `;
 }
 

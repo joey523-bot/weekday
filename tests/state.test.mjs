@@ -85,3 +85,24 @@ test("reminders can be updated without changing their completion history", async
     completedAt
   });
 });
+
+test("account snapshot includes shared preferences and account clear removes local records", async () => {
+  const storage = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => storage.get(key) || null,
+    setItem: (key, value) => storage.set(key, String(value)),
+    removeItem: (key) => storage.delete(key)
+  };
+  globalThis.window = { dispatchEvent: () => {} };
+  globalThis.CustomEvent = class CustomEvent { constructor(type) { this.type = type; } };
+
+  const state = await import(`../scripts/state.js?account=${Date.now()}`);
+  state.updateSalary({ amount: "15000", account: "工资卡" });
+  state.setTheme("twinkle");
+  const snapshot = state.getSyncSnapshot();
+  assert.equal(snapshot.preferences.theme, "twinkle");
+  assert.equal(snapshot.salary.amount, "15000");
+  state.clearAccountData();
+  assert.equal(state.getState().salary.amount, "");
+  assert.equal(state.getState().reminders.length, 0);
+});

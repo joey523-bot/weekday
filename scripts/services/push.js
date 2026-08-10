@@ -114,15 +114,17 @@ export async function syncReminderPushRules({ reminders }) {
 
 export async function disableSalaryPushNotifications() {
   const subscription = await getCurrentPushSubscription();
-
-  await postJson(PUSH_UNREGISTER_ENDPOINT, {
-    installationId: getInstallationId(),
-    endpoint: subscription?.endpoint || ""
-  });
-
-  if (subscription) {
-    await subscription.unsubscribe();
+  let remoteError = null;
+  try {
+    await postJson(PUSH_UNREGISTER_ENDPOINT, {
+      installationId: getInstallationId(),
+      endpoint: subscription?.endpoint || ""
+    });
+  } catch (error) {
+    remoteError = error;
   }
+  if (subscription) await subscription.unsubscribe();
+  if (remoteError) throw remoteError;
 }
 
 export async function sendLocalTestNotification() {

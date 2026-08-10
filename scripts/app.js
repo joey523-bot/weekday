@@ -4,6 +4,7 @@ import {
   addCustomTheme,
   deleteReminder,
   deleteCustomTheme,
+  clearAccountData,
   getSyncSnapshot,
   getState,
   replaceSyncedData,
@@ -29,13 +30,14 @@ import {
   syncSalaryPushRule
 } from "./services/push.js";
 import {
-  createCloudBackup,
-  forgetCloudBackupOnDevice,
-  getRecoveryCode,
-  hasCloudBackup,
-  restoreCloudBackup,
-  syncCloudBackup
-} from "./services/sync.js";
+  changeAccountPassword,
+  getAccountSession,
+  loadAccountSnapshot,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
+  saveAccountSnapshot
+} from "./services/account.js";
 import { prepareThemeImage } from "./services/theme.js";
 import { fetchWeatherReportByCoordinates } from "./services/weather.js";
 import { formatDateLong } from "./utils/date.js";
@@ -50,13 +52,15 @@ import {
   renderOverviewReminderPreview,
   renderSalaryPanel
 } from "./views/render.js";
-import { createShell } from "./views/shell.js";
+import { createAuthShell, createShell } from "./views/shell.js";
 
 let activeView = "overview";
 let editingReminderId = null;
-let cloudSyncTimer = null;
-let cloudSyncPaused = false;
-let cloudStatusText = "";
+let accountSyncTimer = null;
+let accountSyncPaused = false;
+let accountRevision = 0;
+let activeAccount = null;
+let accountDirty = false;
 const CUSTOM_THEME_VARIABLES = [
   "--bg", "--surface", "--surface-strong", "--surface-muted", "--text", "--text-muted", "--text-soft",
   "--text-inverse", "--accent", "--accent-strong", "--accent-soft", "--accent-warm", "--accent-warm-soft",
@@ -65,10 +69,22 @@ const CUSTOM_THEME_VARIABLES = [
 
 boot();
 
-function boot() {
+async function boot() {
   document.title = APP_META.productName;
-  applyTheme(getState().preferences.theme);
   const root = document.querySelector("#app");
+  const session = await getAccountSession().catch(() => null);
+  if (!session?.user) {
+    root.innerHTML = createAuthShell();
+    bindAuthEvents(root);
+    return;
+  }
+
+  activeAccount = session.user;
+  startApplication(root);
+}
+
+async function startApplication(root) {
+  applyTheme(getState().preferences.theme);
   root.innerHTML = createShell();
 
   const refs = createRefs(document);
@@ -76,12 +92,74 @@ function boot() {
 
   populateSalaryOptions(refs.salaryDaySelect, state.salary.day);
   bindEvents(refs);
+  await hydrateAccountData(refs);
   renderAll(refs);
   registerServiceWorker();
   hydratePushSubscription(refs);
-  hydrateDefaultWeather(refs, state);
-  hydrateCloudBackup(refs);
-  window.addEventListener("yoyuan:state-changed", () => scheduleCloudSync(refs));
+  hydrateDefaultWeather(refs, getState());
+  window.addEventListener("yoyuan:state-changed", () => {
+    accountDirty = true;
+    scheduleAccountSync(refs);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (accountDirty) {
+      scheduleAccountSync(refs);
+      return;
+    }
+    hydrateAccountData(refs, { preserveLocal: true });
+  });
+  window.addEventListener("online", () => {
+    if (accountDirty) scheduleAccountSync(refs);
+  });
+}
+
+function bindAuthEvents(root) {
+  const loginForm = root.querySelector("#loginForm");
+  const registerForm = root.querySelector("#registerForm");
+  const loginState = root.querySelector("#loginState");
+  const registerState = root.querySelector("#registerState");
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    loginState.textContent = "正在登录…";
+    const submit = loginForm.querySelector("button[type=submit]");
+    submit.disabled = true;
+    try {
+      const result = await loginAccount({
+        username: root.querySelector("#loginUsername").value,
+        password: root.querySelector("#loginPassword").value
+      });
+      clearAccountData();
+      activeAccount = result.user;
+      await startApplication(root);
+    } catch (error) {
+      loginState.textContent = error.message;
+      submit.disabled = false;
+    }
+  });
+
+  registerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    registerState.textContent = "正在创建账号…";
+    const submit = registerForm.querySelector("button[type=submit]");
+    submit.disabled = true;
+    try {
+      if (root.querySelector("#registerPassword").value !== root.querySelector("#registerPasswordConfirm").value) {
+        throw new Error("两次输入的密码不一致");
+      }
+      const result = await registerAccount({
+        username: root.querySelector("#registerUsername").value,
+        password: root.querySelector("#registerPassword").value,
+        snapshot: getSyncSnapshot()
+      });
+      activeAccount = result.user;
+      await startApplication(root);
+    } catch (error) {
+      registerState.textContent = error.message;
+      submit.disabled = false;
+    }
+  });
 }
 
 function bindEvents(refs) {
@@ -188,68 +266,30 @@ function bindEvents(refs) {
     syncExistingPushSubscription(refs);
   });
 
-  refs.cloudCreateButton.addEventListener("click", async () => {
-    setCloudStatus(refs, "正在创建加密备份…");
-    refs.cloudCreateButton.disabled = true;
+  refs.changePasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    refs.changePasswordState.textContent = "正在修改密码…";
     try {
-      const recoveryCode = await createCloudBackup(getSyncSnapshot());
-      refs.recoveryCodeInput.value = recoveryCode;
-      setCloudStatus(refs, "云端备份已开启，请立即保存恢复码。");
+      if (refs.newPasswordInput.value !== refs.newPasswordConfirmInput.value) throw new Error("两次输入的新密码不一致");
+      await changeAccountPassword({ currentPassword: refs.currentPasswordInput.value, newPassword: refs.newPasswordInput.value });
+      refs.changePasswordForm.reset();
+      refs.changePasswordState.textContent = "密码已更新，请妥善保管。";
     } catch (error) {
-      setCloudStatus(refs, error.message);
+      refs.changePasswordState.textContent = error.message;
+    }
+  });
+
+  refs.logoutButton.addEventListener("click", async () => {
+    if (!window.confirm("退出后会清除这台设备的本地数据与提醒订阅，确定继续吗？")) return;
+    refs.logoutButton.disabled = true;
+    try {
+      await disableSalaryPushNotifications().catch(() => {});
+      await logoutAccount();
     } finally {
-      refs.cloudCreateButton.disabled = false;
-      renderCloudPanel(refs);
+      clearAccountData();
+      activeAccount = null;
+      window.location.reload();
     }
-  });
-
-  refs.cloudRestoreButton.addEventListener("click", async () => {
-    const recoveryCode = refs.recoveryCodeInput.value.trim();
-    if (!recoveryCode) {
-      setCloudStatus(refs, "请先输入恢复码");
-      return;
-    }
-
-    setCloudStatus(refs, "正在从云端恢复…");
-    refs.cloudRestoreButton.disabled = true;
-    try {
-      const result = await restoreCloudBackup(recoveryCode);
-      cloudSyncPaused = true;
-      replaceSyncedData(result.snapshot);
-      cloudSyncPaused = false;
-      renderAll(refs);
-      await syncExistingPushSubscription(refs);
-      setCloudStatus(refs, "云端数据已恢复到这台设备。");
-    } catch (error) {
-      cloudSyncPaused = false;
-      setCloudStatus(refs, error.message);
-    } finally {
-      refs.cloudRestoreButton.disabled = false;
-      renderCloudPanel(refs);
-    }
-  });
-
-  refs.cloudCopyButton.addEventListener("click", async () => {
-    const recoveryCode = getRecoveryCode();
-    if (!recoveryCode) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(recoveryCode);
-      setCloudStatus(refs, "恢复码已复制，请保存到密码管理器。");
-    } catch (error) {
-      refs.recoveryCodeInput.value = recoveryCode;
-      refs.recoveryCodeInput.select();
-      setCloudStatus(refs, "请长按复制恢复码并妥善保存。");
-    }
-  });
-
-  refs.cloudForgetButton.addEventListener("click", () => {
-    forgetCloudBackupOnDevice();
-    refs.recoveryCodeInput.value = "";
-    setCloudStatus(refs, "这台设备已停止云同步，云端加密备份仍保留。");
-    renderCloudPanel(refs);
   });
 
   refs.clearAppCacheButton?.addEventListener("click", async () => {
@@ -449,8 +489,13 @@ function renderAll(refs) {
   renderOverviewWeather(state, refs);
   renderReminderBoard(state, refs);
   renderOverviewReminderPreview(state, refs);
-  renderCloudPanel(refs);
+  renderAccountPanel(refs);
   syncViewState(refs);
+}
+
+function renderAccountPanel(refs) {
+  refs.accountStatusBadge.textContent = activeAccount?.username ? "已登录" : "未登录";
+  refs.accountUsername.textContent = activeAccount?.username ? `当前账号：${activeAccount.username}` : "--";
 }
 
 function applyTheme(theme) {
@@ -627,76 +672,47 @@ async function refreshAppAssetsAndReload(refs) {
   }
 }
 
-async function hydrateCloudBackup(refs) {
-  renderCloudPanel(refs);
-  if (!hasCloudBackup()) {
-    return;
-  }
-
+async function hydrateAccountData(refs, { preserveLocal = false } = {}) {
+  if (!activeAccount || !navigator.onLine) return;
   try {
-    if (hasMeaningfulLocalData(getState())) {
-      await syncCloudBackup(getSyncSnapshot());
-      setCloudStatus(refs, "本机数据已同步到云端。");
-      return;
-    }
-
-    const result = await restoreCloudBackup(getRecoveryCode());
-    cloudSyncPaused = true;
-    replaceSyncedData(result.snapshot);
-    cloudSyncPaused = false;
+    const remote = await loadAccountSnapshot();
+    if (!remote.snapshot) return;
+    if (preserveLocal && remote.revision === accountRevision) return;
+    accountSyncPaused = true;
+    replaceSyncedData(remote.snapshot);
+    accountRevision = remote.revision;
+    accountDirty = false;
     renderAll(refs);
     await syncExistingPushSubscription(refs);
-    setCloudStatus(refs, "已自动恢复云端数据。");
   } catch (error) {
-    cloudSyncPaused = false;
-    setCloudStatus(refs, navigator.onLine ? error.message : "当前离线，将继续使用本机数据。");
+    console.warn("Account sync hydration failed", error);
+  } finally {
+    accountSyncPaused = false;
   }
 }
 
-function scheduleCloudSync(refs) {
-  if (cloudSyncPaused || !hasCloudBackup()) {
-    return;
-  }
-
-  window.clearTimeout(cloudSyncTimer);
-  cloudSyncTimer = window.setTimeout(async () => {
+function scheduleAccountSync(refs) {
+  if (accountSyncPaused || !activeAccount) return;
+  window.clearTimeout(accountSyncTimer);
+  accountSyncTimer = window.setTimeout(async () => {
+    if (!navigator.onLine) return;
     try {
-      await syncCloudBackup(getSyncSnapshot());
-      setCloudStatus(refs, "已自动同步到云端。");
+      const snapshot = getSyncSnapshot();
+      const result = await saveAccountSnapshot(snapshot, accountRevision);
+      if (result.conflict) {
+        accountSyncPaused = true;
+        accountRevision = result.revision;
+        const retry = await saveAccountSnapshot(snapshot, accountRevision);
+        accountRevision = retry.revision;
+      }
+      else accountRevision = result.revision;
+      accountDirty = false;
     } catch (error) {
-      setCloudStatus(refs, navigator.onLine ? error.message : "当前离线，联网后再次修改即可同步。");
+      console.warn("Account sync save failed", error);
+    } finally {
+      accountSyncPaused = false;
     }
   }, 800);
-}
-
-function renderCloudPanel(refs) {
-  const recoveryCode = getRecoveryCode();
-  const enabled = Boolean(recoveryCode);
-
-  refs.cloudStatusBadge.textContent = enabled ? "已开启" : "未开启";
-  refs.cloudCreateButton.hidden = enabled;
-  refs.cloudCopyButton.hidden = !enabled;
-  refs.cloudForgetButton.hidden = !enabled;
-  refs.recoveryCodeDisplay.hidden = !enabled;
-  refs.recoveryCodeDisplay.textContent = enabled ? recoveryCode : "";
-  refs.recoveryCodeInput.placeholder = enabled ? "输入其他恢复码可切换备份" : "输入已有恢复码";
-  refs.cloudSyncState.textContent =
-    cloudStatusText || (enabled ? "数据修改后会自动加密同步。" : "开启后会生成唯一恢复码。");
-}
-
-function setCloudStatus(refs, message) {
-  cloudStatusText = message;
-  refs.cloudSyncState.textContent = message;
-}
-
-function hasMeaningfulLocalData(state) {
-  return Boolean(
-    state.reminders.length ||
-      state.salary.amount ||
-      state.salary.account ||
-      state.salary.day !== 15 ||
-      state.salary.notification.leadDays
-  );
 }
 
 async function hydratePushSubscription(refs) {

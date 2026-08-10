@@ -1,7 +1,6 @@
 export const STORAGE_KEY = "yoyuan-ledger:v2";
 export const INSTALLATION_KEY = "yoyuan-ledger:installation-id";
-export const RECOVERY_CODE_KEY = "yoyuan-ledger:recovery-code";
-export const APP_VERSION = "20260805.1";
+export const APP_VERSION = "20260810.1";
 
 export const APP_META = {
   productName: "星期",

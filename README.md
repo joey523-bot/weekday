@@ -8,7 +8,7 @@
 - 天气速览
 - 本地日历导出与数据备份
 - iPhone / PWA 工资与自定义事项通知（Web Push）
-- 恢复码云端备份（浏览器端 AES-GCM 加密）
+- 用户名密码登录与跨设备自动同步
 
 ## 项目结构
 
@@ -21,7 +21,7 @@
 - [manifest.webmanifest](manifest.webmanifest): PWA 配置
 - [sw.js](sw.js): 离线缓存
 - [functions](functions): Cloudflare Pages Functions 接口
-- [cloudflare/d1-schema.sql](cloudflare/d1-schema.sql): 推送订阅表结构
+- [cloudflare/d1-schema.sql](cloudflare/d1-schema.sql): 推送、账号与同步表结构
 - [workers/salary-notifier](workers/salary-notifier): 定时发送发薪提醒的独立 Worker
 
 ## 提醒通知架构
@@ -37,7 +37,7 @@
   - 保存 / 关闭设备订阅
 - Cloudflare D1 负责：
   - 存储每台设备的工资和自定义事项提醒规则
-  - 存储无法由服务器解密的工资与事项备份
+  - 按账号保存工资与事项快照
 - 独立 Cloudflare Worker + Cron 负责：
   - 每 5 分钟按北京时间检查到期的工资和自定义事项；在设定时刻所在小时内可自动补发一次
   - 按月循环发送工资 Web Push，并按单次事项发送提醒
@@ -55,7 +55,7 @@
 
 把 [`cloudflare/d1-schema.sql`](cloudflare/d1-schema.sql) 导入同一个 D1 数据库。
 
-更新已有数据库时也需要再次执行该文件，以创建 `reminder_push_rules` 和 `encrypted_user_backups` 表。
+新建数据库时只导入该文件。已有数据库只执行 [`cloudflare/migrations/0002-accounts.sql`](cloudflare/migrations/0002-accounts.sql) 一次；不要在同一个数据库重复执行两份 SQL。
 
 ### 3. 定时 Worker
 
@@ -117,8 +117,8 @@ npx web-push generate-vapid-keys
 
 另外注意：
 
-- 开启“云端备份”后，请把恢复码保存到密码管理器；恢复码丢失后无法解密云端数据
-- 新设备或本机数据被清除后，可在“设置 -> 云端备份与恢复”输入恢复码
+- 首次使用时请创建用户名和密码；密码不支持找回，遗失后旧数据无法恢复
+- 新设备登录同一账号后，会在启动、回到前台和修改数据后自动同步
 - “保存发薪设置”不会自动开启系统通知；首次请点击“开启通知并同步”授权
 - 创建事项时可选择是否推送、提前几天，以及推送整点；开启一次通知权限后会自动同步
 - 可以先点一次“发送测试通知”，确认当前 iPhone 的 PWA 通知权限本身正常

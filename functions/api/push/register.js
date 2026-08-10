@@ -1,7 +1,10 @@
 import { badRequest, json } from "../../_utils/http.js";
 import { normalizePushPayload } from "../../_utils/push.js";
+import { requireSession } from "../../_utils/auth.js";
 
 export async function onRequestPost(context) {
+  const session = await requireSession(context);
+  if (session.response) return session.response;
   if (!context.env.DB) {
     return badRequest("缺少 D1 绑定 DB", 503);
   }
@@ -38,9 +41,10 @@ export async function onRequestPost(context) {
         permission,
         app_name,
         user_agent,
+        user_id,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(installation_id) DO UPDATE SET
         endpoint = excluded.endpoint,
         p256dh = excluded.p256dh,
@@ -53,6 +57,7 @@ export async function onRequestPost(context) {
         permission = excluded.permission,
         app_name = excluded.app_name,
         user_agent = excluded.user_agent,
+        user_id = excluded.user_id,
         updated_at = excluded.updated_at
     `
   )
@@ -68,6 +73,7 @@ export async function onRequestPost(context) {
       payload.permission,
       payload.appName,
       userAgent,
+      session.session.user_id,
       now,
       now
     )
