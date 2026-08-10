@@ -119,6 +119,22 @@ function bindAuthEvents(root) {
   const registerForm = root.querySelector("#registerForm");
   const loginState = root.querySelector("#loginState");
   const registerState = root.querySelector("#registerState");
+  const authTabs = Array.from(root.querySelectorAll("[data-auth-mode]"));
+
+  authTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const mode = tab.dataset.authMode;
+      const loginActive = mode === "login";
+      loginForm.hidden = !loginActive;
+      registerForm.hidden = loginActive;
+      authTabs.forEach((button) => {
+        const active = button.dataset.authMode === mode;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", String(active));
+      });
+      (loginActive ? root.querySelector("#loginUsername") : root.querySelector("#registerUsername"))?.focus();
+    });
+  });
 
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();

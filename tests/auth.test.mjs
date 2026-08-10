@@ -8,7 +8,8 @@ test("normalizes and validates account credentials", () => {
   assert.equal(isValidUsername(normalizeUsername("no")), false);
   assert.equal(isValidUsername(normalizeUsername("name-with-dash")), false);
   assert.equal(isValidPassword("a secure password"), true);
-  assert.equal(isValidPassword("too-short"), false);
+  assert.equal(isValidPassword("1"), true);
+  assert.equal(isValidPassword(""), false);
 });
 
 test("password hashes use a unique salt and only verify the original password", async () => {

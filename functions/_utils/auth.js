@@ -1,7 +1,7 @@
 import { json } from "./http.js";
 
 const SESSION_COOKIE = "yoyuan_session";
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 400 * 24 * 60 * 60 * 1000;
 const PASSWORD_ITERATIONS = 600000;
 const encoder = new TextEncoder();
 
@@ -14,7 +14,7 @@ export function isValidUsername(value) {
 }
 
 export function isValidPassword(value) {
-  return typeof value === "string" && value.length >= 12 && value.length <= 200;
+  return typeof value === "string" && value.length >= 1 && value.length <= 200;
 }
 
 export async function hashPassword(password, salt = randomBase64Url(16)) {
@@ -47,7 +47,7 @@ export async function requireSession(context) {
      WHERE s.token_hash = ?1 AND s.expires_at > ?2`
   ).bind(tokenHash, now).first();
   if (!session) return { response: json({ error: "登录已过期，请重新登录" }, { status: 401 }) };
-  return { session, tokenHash };
+  return { session, tokenHash, token };
 }
 
 export async function createSession(context, userId) {
@@ -66,6 +66,13 @@ export function clearSessionCookie() {
 
 export async function deleteSession(context, tokenHash) {
   if (tokenHash) await context.env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(tokenHash).run();
+}
+
+export async function renewSession(context, tokenHash, token) {
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  await context.env.DB.prepare("UPDATE auth_sessions SET expires_at = ?, last_seen_at = ? WHERE token_hash = ?")
+    .bind(expiresAt, new Date().toISOString(), tokenHash).run();
+  return sessionCookie(token);
 }
 
 export async function loginBlocked(context, username) {
@@ -100,6 +107,10 @@ export async function clearFailedLogins(context, username) {
 
 export async function sha256(value) {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));
+}
+
+function sessionCookie(token) {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
 }
 
 function getCookie(request, name) {

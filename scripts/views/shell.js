@@ -249,11 +249,11 @@ export function createShell() {
                 </label>
                 <label class="field">
                   <span class="field__label">新密码</span>
-                  <input id="newPasswordInput" class="input" type="password" minlength="12" autocomplete="new-password" required />
+                  <input id="newPasswordInput" class="input" type="password" autocomplete="new-password" required />
                 </label>
                 <label class="field">
                   <span class="field__label">确认新密码</span>
-                  <input id="newPasswordConfirmInput" class="input" type="password" minlength="12" autocomplete="new-password" required />
+                  <input id="newPasswordConfirmInput" class="input" type="password" autocomplete="new-password" required />
                 </label>
                 <button class="button button--secondary" type="submit">修改密码</button>
                 <p id="changePasswordState" class="form-note" aria-live="polite">密码不支持找回，请妥善保管。</p>
@@ -289,32 +289,39 @@ export function createShell() {
 export function createAuthShell() {
   return `
     <div class="page-noise"></div>
-    <main class="app-shell workspace" aria-labelledby="authTitle">
-      <header class="page-intro">
-        <div class="section-kicker"><span>星期</span><span class="section-kicker__line"></span></div>
-        <h1 id="authTitle">登录后开始同步</h1>
-        <p>在不同设备登录同一账号，即可自动同步工资和事项。</p>
-      </header>
-      <section class="settings-grid">
-        <article class="journal-card graph-paper form-card">
-          <div class="card-heading"><div><h2>登录</h2><p>密码不支持找回，请妥善保管。</p></div></div>
-          <form id="loginForm" class="stack-form">
-            <label class="field"><span class="field__label">用户名</span><input id="loginUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
-            <label class="field"><span class="field__label">密码</span><input id="loginPassword" class="input" type="password" minlength="12" autocomplete="current-password" required /></label>
-            <button class="button button--primary button--block" type="submit">登录</button>
-            <p id="loginState" class="form-note" aria-live="polite"></p>
-          </form>
-        </article>
-        <article class="journal-card graph-paper form-card">
-          <div class="card-heading"><div><h2>创建账号</h2><p>用户名只能使用字母、数字和下划线。</p></div></div>
-          <form id="registerForm" class="stack-form">
-            <label class="field"><span class="field__label">用户名</span><input id="registerUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
-            <label class="field"><span class="field__label">密码</span><input id="registerPassword" class="input" type="password" minlength="12" autocomplete="new-password" required /></label>
-            <label class="field"><span class="field__label">确认密码</span><input id="registerPasswordConfirm" class="input" type="password" minlength="12" autocomplete="new-password" required /></label>
-            <button class="button button--secondary button--block" type="submit">创建账号</button>
-            <p id="registerState" class="form-note" aria-live="polite">会同步当前设备上的数据。</p>
-          </form>
-        </article>
+    <main class="auth-screen" aria-labelledby="authTitle">
+      <section class="auth-screen__intro">
+        <div class="auth-brand"><span class="auth-brand__mark"><img src="./assets/icons/app-icon-star-192.png?v=20260810.1" alt="" width="42" height="42" /></span><span>星期</span></div>
+        <p class="auth-screen__eyebrow">你的私人时间本</p>
+        <h1 id="authTitle">把生活的节奏<br /><em>带着走。</em></h1>
+        <p class="auth-screen__lead">发薪日、重要事项和提醒，会跟着你的账号出现在每一台设备上。</p>
+        <ol class="auth-route" aria-label="账号同步流程">
+          <li><span>01</span><div><strong>登录一次</strong><small>打开应用会自动保持登录</small></div></li>
+          <li><span>02</span><div><strong>自动同步</strong><small>修改后会保存到当前账号</small></div></li>
+          <li><span>03</span><div><strong>随时退出</strong><small>退出会清除这台设备的数据</small></div></li>
+        </ol>
+      </section>
+      <section class="auth-card" aria-label="账号登录与注册">
+        <div class="auth-card__head"><p>账户</p><h2>开始使用</h2></div>
+        <div class="auth-tabs" role="tablist" aria-label="账户操作">
+          <button class="auth-tabs__item is-active" data-auth-mode="login" type="button" role="tab" aria-selected="true" aria-controls="loginForm">登录</button>
+          <button class="auth-tabs__item" data-auth-mode="register" type="button" role="tab" aria-selected="false" aria-controls="registerForm">创建账号</button>
+        </div>
+        <form id="loginForm" class="stack-form auth-form" role="tabpanel">
+          <p class="auth-form__hint">在已使用过的设备上继续。</p>
+          <label class="field"><span class="field__label">用户名</span><input id="loginUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
+          <label class="field"><span class="field__label">密码</span><input id="loginPassword" class="input" type="password" autocomplete="current-password" required /></label>
+          <button class="button button--primary button--block" type="submit">进入星期</button>
+          <p id="loginState" class="form-note" aria-live="polite"></p>
+        </form>
+        <form id="registerForm" class="stack-form auth-form" role="tabpanel" hidden>
+          <p class="auth-form__hint">当前设备的数据会同步到新账号。</p>
+          <label class="field"><span class="field__label">用户名</span><input id="registerUsername" class="input" autocomplete="username" pattern="[A-Za-z0-9_]{3,24}" required /></label>
+          <label class="field"><span class="field__label">密码</span><input id="registerPassword" class="input" type="password" autocomplete="new-password" required /></label>
+          <label class="field"><span class="field__label">确认密码</span><input id="registerPasswordConfirm" class="input" type="password" autocomplete="new-password" required /></label>
+          <button class="button button--primary button--block" type="submit">创建并开始同步</button>
+          <p id="registerState" class="form-note" aria-live="polite">密码无法找回，请自行保存。</p>
+        </form>
       </section>
     </main>
   `;

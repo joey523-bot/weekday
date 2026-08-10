@@ -5,7 +5,7 @@ export async function onRequestPost(context) {
   const result = await requireSession(context);
   if (result.response) return result.response;
   const body = await context.request.json().catch(() => null);
-  if (!isValidPassword(body?.newPassword)) return badRequest("新密码至少需要 12 位");
+  if (!isValidPassword(body?.newPassword)) return badRequest("请输入新密码");
   const user = await context.env.DB.prepare("SELECT password_hash, password_salt FROM users WHERE id = ?").bind(result.session.user_id).first();
   if (!(await verifyPassword(body?.currentPassword || "", user.password_salt, user.password_hash))) return badRequest("当前密码错误", 401);
   const { salt, hash } = await hashPassword(body.newPassword);

@@ -7,7 +7,7 @@ export async function onRequestPost(context) {
   const username = normalizeUsername(body?.username);
   const password = body?.password;
   if (!isValidUsername(username)) return badRequest("用户名需为 3–24 位字母、数字或下划线");
-  if (!isValidPassword(password)) return badRequest("密码至少需要 12 位");
+  if (!isValidPassword(password)) return badRequest("请输入密码");
   if (!isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
 
   const now = new Date().toISOString();
