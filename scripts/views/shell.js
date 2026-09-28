@@ -130,8 +130,9 @@ export function createShell() {
             <form id="reminderForm" class="stack-form">
               <label class="field">
                 <span class="field__label">事情</span>
-                <input id="reminderTitleInput" name="title" class="input" type="text" placeholder="手机套餐续费" maxlength="80" required />
+                <input id="reminderTitleInput" name="title" class="input" type="text" placeholder="例如：手机套餐续费" role="combobox" aria-autocomplete="list" aria-controls="reminderSuggestions" aria-expanded="false" maxlength="80" required />
               </label>
+              <div id="reminderSuggestions" class="reminder-suggestions" role="listbox" aria-label="历史事项快捷建议" hidden></div>
               <div class="split-grid">
                 <label class="field">
                   <span class="field__label">事项日期</span>

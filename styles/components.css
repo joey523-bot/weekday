@@ -1938,3 +1938,9 @@ button.weather-peek__content {
 .reminder-detail { width: min(420px, calc(100vw - 32px)); max-height: 85dvh; box-sizing: border-box; overflow: auto; border: 1px solid var(--line); border-radius: 24px; padding: 24px; color: var(--text); background: var(--surface-strong); }
 .reminder-detail::backdrop { background: rgb(0 0 0 / 35%); }
 .reminder-detail h2, .reminder-detail__notes { overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* History suggestions are actions, distinct from the input example. */
+.reminder-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.reminder-suggestions[hidden] { display: none; }
+.reminder-suggestion { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: var(--surface); color: var(--text); font: inherit; max-width: 100%; overflow-wrap: anywhere; cursor: pointer; }
+.reminder-suggestion[aria-selected="true"], .reminder-suggestion:focus-visible { border-color: var(--accent); background: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: 1px; }

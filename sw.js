@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   "./scripts/services/weather.js",
   "./scripts/utils/date.js",
   "./scripts/utils/reminder-default.js",
+  "./scripts/utils/reminder-suggestions.js",
   "./scripts/utils/payday.js",
   "./scripts/utils/workday-calendar.js",
   "./scripts/utils/format.js",

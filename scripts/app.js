@@ -58,6 +58,10 @@ import { createAuthShell, createShell } from "./views/shell.js";
 
 import { createReminderTimeDefault } from "./utils/reminder-default.js";
 
+import { bindReminderSuggestions } from "./utils/reminder-suggestions.js";
+
+let suggestionUI;
+let suggestionHistory = [];
 const reminderTimeDefault = createReminderTimeDefault();
 let activeView = "overview";
 let editingReminderId = null;
@@ -95,6 +99,8 @@ async function boot() {
 }
 
 async function startApplication(root) {
+  suggestionHistory = [];
+  suggestionUI = null;
   applyTheme(getState().preferences.theme);
   root.innerHTML = createShell();
 
@@ -212,6 +218,7 @@ function bindAuthEvents(root) {
 function bindEvents(refs) {
   const root = document.querySelector("#app");
 
+  suggestionUI = bindReminderSuggestions(refs.reminderTitleInput, root.querySelector("#reminderSuggestions"), () => suggestionHistory);
   syncReminderDateDisplay(refs);
   const onReminderDateChange = () => {
     reminderTimeDefault.apply(refs, editingReminderId !== null);
@@ -505,6 +512,7 @@ function openReminderEditor(refs, reminder) {
   refs.reminderHourSelect.value = String(reminder.hour);
   refs.reminderNotificationInput.checked = reminder.notificationEnabled;
   refs.reminderNotesInput.value = reminder.notes;
+  suggestionUI?.refresh();
   refs.reminderFormHeading.textContent = "编辑事项";
   refs.reminderFormDescription.textContent = "更新日期、提醒或备注后，保存即可生效。";
   refs.reminderSubmitButton.textContent = "保存修改";
@@ -522,6 +530,7 @@ function resetReminderForm(refs) {
   refs.reminderLeadDaysInput.value = "0";
   refs.reminderHourSelect.value = "9";
   refs.reminderNotificationInput.checked = true;
+  suggestionUI?.refresh();
   refs.reminderFormHeading.textContent = "新建事项";
   refs.reminderFormDescription.textContent = "记下日期和提醒时刻，到点让小星轻轻提醒你。";
   refs.reminderSubmitButton.textContent = "保存事项";
@@ -739,6 +748,8 @@ async function hydrateAccountData(refs, { preserveLocal = false } = {}) {
     if (preserveLocal && (accountDirty || routeLoading || detailReminderId || remote.revision === accountRevision)) return;
     accountSyncPaused = true;
     replaceSyncedData(remote.snapshot);
+    suggestionHistory = getState().reminders;
+    suggestionUI?.refresh();
     accountRevision = remote.revision;
     accountDirty = false;
     renderAll(refs);
@@ -772,6 +783,8 @@ async function flushAccountSync() {
       throw new Error("其他设备已更新事项，请刷新后确认最新状态。");
     }
     accountRevision = result.revision;
+    suggestionHistory = snapshot.reminders;
+    suggestionUI?.refresh();
     if (accountChangeVersion === version) accountDirty = false;
   })();
   try {
@@ -839,6 +852,8 @@ async function openNotificationReminder(refs) {
     accountSyncPaused = true;
     try {
       replaceSyncedData(remote.snapshot || { reminders: [] });
+      suggestionHistory = getState().reminders;
+      suggestionUI?.refresh();
       accountRevision = remote.revision;
     } finally {
       accountSyncPaused = false;
