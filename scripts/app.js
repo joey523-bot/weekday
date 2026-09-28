@@ -464,6 +464,11 @@ function bindEvents(refs) {
       return;
     }
 
+    if (action === "detail") {
+      await openReminderDetail(refs, id);
+      return;
+    }
+
     const reminder = getState().reminders.find((entry) => entry.id === id);
     if (!reminder) {
       return;
@@ -798,6 +803,20 @@ async function flushAccountSync() {
 
 function bindReminderNavigation(refs) {
   const dialog = document.querySelector("#reminderDetail");
+  const root = document.querySelector("#app");
+  root.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (event.target.closest("button, a, input, select, textarea, [data-action], [data-switch-view]")) return;
+    const card = event.target.closest("[data-reminder-detail]");
+    if (card) openReminderDetail(refs, card.dataset.reminderDetail);
+  });
+  root.addEventListener("keydown", (event) => {
+    if (!(event.target instanceof Element) || !event.target.matches('.reminder-item__body[role="button"]')) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    const card = event.target.closest("[data-reminder-detail]");
+    if (card) openReminderDetail(refs, card.dataset.reminderDetail);
+  });
   window.addEventListener("hashchange", () => openNotificationReminder(refs));
   dialog.addEventListener("close", () => { if (!dialog.open) detailReminderId = null; });
   document.querySelector("#reminderDetailClose").addEventListener("click", () => dialog.close());
@@ -837,7 +856,10 @@ function bindReminderNavigation(refs) {
 async function openNotificationReminder(refs) {
   const params = new URLSearchParams(window.location.hash.slice(1));
   if (!params.has("reminder")) return;
-  const id = params.get("reminder");
+  return openReminderDetail(refs, params.get("reminder"), { consumeRoute: true });
+}
+
+async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
   const version = ++routeVersion;
   routeLoading = true;
   const dialog = document.querySelector("#reminderDetail");
@@ -862,7 +884,7 @@ async function openNotificationReminder(refs) {
     }
     renderAll(refs);
     const reminder = remote.snapshot?.reminders?.find((item) => item.id === id);
-    history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (consumeRoute) history.replaceState(null, "", window.location.pathname + window.location.search);
     if (!reminder) {
       refs.reminderBoardState.textContent = "该事项已删除或当前账号无权访问，请在事项列表中查看其他事项。";
       return;

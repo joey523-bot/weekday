@@ -149,6 +149,62 @@ try {
     assert.equal(await page.locator('#reminderDetail').evaluate(el => el.open), false);
     assert.match(page.url(), /reminder=r2/);
   });
+  await scenario('home card and View share detail; completion persists', async (page, api) => {
+    await page.goto(origin);
+    await page.locator('#overviewReminderList [data-reminder-detail="r2"] .reminder-item__title').click();
+    await page.locator('#reminderDetail[open]').waitFor();
+    assert.equal(await text(page, '#reminderDetailTitle'), '测试事项二');
+    await page.click('#reminderDetailComplete');
+    await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
+    assert.equal(api.snapshot().reminders[1].completed, true);
+    await page.click('#reminderDetailClose');
+    await page.locator('[data-tab-button][data-switch-view="overview"]').click();
+    await page.setViewportSize({ width: 1280, height: 900 }); // Existing View control is desktop-only.
+    await page.locator('#overviewReminderList [data-action="detail"][data-id="r1"]').click();
+    await page.locator('#reminderDetail[open]').waitFor();
+    assert.equal(await text(page, '#reminderDetailTitle'), '测试事项一');
+  });
+  await scenario('list keyboard opens correct detail and existing editor', async page => {
+    await page.goto(origin);
+    await page.locator('[data-tab-button][data-switch-view="reminders"]').click();
+    const body = page.locator('#reminderList [data-reminder-detail="r2"] .reminder-item__body');
+    await body.focus(); await body.press('Enter');
+    await page.locator('#reminderDetail[open]').waitFor();
+    assert.equal(await text(page, '#reminderDetailTitle'), '测试事项二');
+    await page.click('#reminderDetailEdit');
+    assert.equal(await page.inputValue('#reminderTitleInput'), '测试事项二');
+  });
+  await scenario('independent edit/complete/restore/delete/export never opens detail', async page => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(origin);
+    await page.locator('[data-tab-button][data-switch-view="reminders"]').click();
+    await page.locator('#reminderList [data-action="edit"][data-id="r1"]').click();
+    assert.equal(await page.inputValue('#reminderTitleInput'), '测试事项一');
+    assert.equal(await page.locator('#reminderDetail').evaluate(el => el.open), false);
+    await page.locator('[data-tab-button][data-switch-view="reminders"]').click();
+    const download = page.waitForEvent('download');
+    await page.locator('#reminderList [data-action="export"][data-id="r1"]').click(); await download;
+    await page.locator('#reminderList [data-action="complete"][data-id="r1"]').click();
+    await page.click('[data-filter="completed"]');
+    await page.locator('#reminderList [data-action="restore"][data-id="r1"]').click();
+    await page.click('[data-filter="all"]');
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#reminderList [data-action="delete"][data-id="r1"]').click();
+    assert.equal(await page.locator('#reminderList [data-reminder-detail="r1"]').count(), 0);
+    assert.equal(await page.locator('#reminderDetail').evaluate(el => el.open), false);
+  });
+  for (const surface of ['overviewReminderList', 'reminderList']) {
+    await scenario(`${surface} stale/deleted/other-account item falls back safely`, async (page, api) => {
+      await page.goto(origin);
+      await page.locator('#overviewReminderList [data-reminder-detail="r1"]').waitFor();
+      await page.waitForTimeout(1000); // Let startup account synchronization finish before remote deletion.
+      const snapshot = api.snapshot(); snapshot.reminders = []; api.replace(snapshot);
+      if (surface === 'reminderList') await page.locator('[data-tab-button][data-switch-view="reminders"]').click();
+      await page.locator(`#${surface} [data-reminder-detail="r1"] .reminder-item__title`).click();
+      await page.getByText('该事项已删除或当前账号无权访问，请在事项列表中查看其他事项。', { exact: true }).waitFor();
+      assert.equal(await page.locator('#reminderDetail').evaluate(el => el.open), false);
+    });
+  }
   console.log(`${count} browser scenarios passed; fixture APIs only.`);
 } finally {
   await browser?.close();

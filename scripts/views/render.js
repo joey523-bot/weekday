@@ -623,13 +623,13 @@ function renderReminderItem(entry, { preview = false } = {}) {
     : `<button class="reminder-complete-button" data-action="complete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="标记事项 ${escapeHtml(entry.title)} 为已完成">${getCompleteIcon()}</button>`;
   const deleteAction = `<button class="reminder-delete-button" data-action="delete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="删除事项 ${escapeHtml(entry.title)}">${getDeleteIcon()}</button>`;
   const itemActions = preview
-    ? `<button class="button button--link" data-switch-view="reminders" type="button">查看</button>`
+    ? `<button class="button button--link" data-action="detail" data-id="${escapeHtml(entry.id)}" type="button">查看</button>`
     : `<button class="button button--link" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">编辑</button><button class="button button--link" data-action="export" data-id="${escapeHtml(entry.id)}" type="button">导出</button>`;
 
   return `
-    <article class="reminder-item reminder-item--${tone}">
+    <article class="reminder-item reminder-item--${tone}" data-reminder-detail="${escapeHtml(entry.id)}">
       <div class="reminder-item__icon" aria-hidden="true">${getCategoryIcon(entry.category)}</div>
-      <div class="reminder-item__body">
+      <div class="reminder-item__body" role="button" tabindex="0" aria-label="查看事项 ${escapeHtml(entry.title)}">
         <div class="reminder-item__title-row">
           <span class="badge">${escapeHtml(entry.category)}</span>
           <h3 class="reminder-item__title" title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</h3>

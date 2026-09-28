@@ -1944,3 +1944,6 @@ button.weather-peek__content {
 .reminder-suggestions[hidden] { display: none; }
 .reminder-suggestion { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: var(--surface); color: var(--text); font: inherit; max-width: 100%; overflow-wrap: anywhere; cursor: pointer; }
 .reminder-suggestion[aria-selected="true"], .reminder-suggestion:focus-visible { border-color: var(--accent); background: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: 1px; }
+
+[data-reminder-detail] { cursor: pointer; }
+.reminder-item__body[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
