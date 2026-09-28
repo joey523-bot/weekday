@@ -1,3 +1,4 @@
+import { bindSnoozePanel } from "./services/snooze.js";
 import { APP_META, APP_THEMES, DEFAULT_THEME, REMINDER_FILTERS } from "./config.js";
 import {
   addReminder,
@@ -60,6 +61,8 @@ import { createReminderTimeDefault } from "./utils/reminder-default.js";
 
 import { bindReminderSuggestions } from "./utils/reminder-suggestions.js";
 
+let dueRefreshTimer;
+let showSnoozePanel;
 let suggestionUI;
 let suggestionHistory = [];
 const reminderTimeDefault = createReminderTimeDefault();
@@ -112,12 +115,27 @@ async function startApplication(root) {
   if (!new URLSearchParams(window.location.hash.slice(1)).has("reminder")) await hydrateAccountData(refs);
   renderAll(refs);
   bindReminderNavigation(refs);
+  clearInterval(dueRefreshTimer);
+  dueRefreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && activeAccount) {
+      renderReminderBoard(getState(), refs);
+      renderOverviewReminderPreview(getState(), refs);
+    }
+  }, 60000);
   await openNotificationReminder(refs);
   registerServiceWorker();
   hydratePushSubscription(refs);
   hydrateDefaultWeather(refs, getState());
+  const sharedFingerprint = () => {
+    const { updatedAt, ...snapshot } = getSyncSnapshot();
+    return JSON.stringify(snapshot);
+  };
+  let observedSnapshot = sharedFingerprint();
   window.addEventListener("yoyuan:state-changed", () => {
-    if (accountSyncPaused) return;
+    const nextSnapshot = sharedFingerprint();
+    const sharedChanged = nextSnapshot !== observedSnapshot;
+    observedSnapshot = nextSnapshot;
+    if (accountSyncPaused || !sharedChanged) return;
     accountDirty = true;
     accountChangeVersion += 1;
     scheduleAccountSync(refs);
@@ -818,6 +836,7 @@ async function flushAccountSync() {
 
 function bindReminderNavigation(refs) {
   const dialog = document.querySelector("#reminderDetail");
+  showSnoozePanel = bindSnoozePanel(dialog, flushAccountSync);
   const root = document.querySelector("#app");
   root.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
@@ -854,6 +873,7 @@ function bindReminderNavigation(refs) {
       await flushAccountSync();
       await syncExistingPushSubscription(refs);
       if (detailReminderId !== id) return;
+      showSnoozePanel({ ...reminder, completed: true });
       document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · 已完成`;
       const pushError = getState().salary.notification.lastError;
       status.textContent = pushError ? `事项已完成并保存；提醒规则同步失败：${pushError}` : "事项已完成并同步。";
@@ -915,6 +935,7 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
     button.textContent = reminder.completed ? "已完成" : "完成事项";
     refs.reminderBoardState.textContent = "";
     dialog.showModal();
+    showSnoozePanel(reminder);
   } catch (error) {
     if (version === routeVersion) {
       setActiveView(refs, "reminders");

@@ -143,7 +143,7 @@ test("scheduler still sends custom reminder when salary calendar is unavailable"
   t.mock.method(console,"warn",()=>{}); t.mock.method(webpush,"setVapidDetails",()=>{});
   const sent=[];t.mock.method(webpush,"sendNotification",async (_s,p)=>sent.push(JSON.parse(p)));
   const env=fakeEnv();const original=env.DB.prepare;
-  env.DB.prepare=sql=> sql.includes("SELECT") ? {async all(){return {results: sql.includes("INNER JOIN")
+  env.DB.prepare=sql=> sql.includes("FROM reminder_snoozes") ? {bind(){return this;},async all(){return {results:[]};}} : sql.includes("SELECT") ? {async all(){return {results: sql.includes("INNER JOIN")
     ? [{...entry, reminder_id:"r1",title:"测试事项",reminder_date:"2027-01-05",last_sent_key:""}] : [entry]};}} : original(sql);
   let pending;await worker.scheduled({},env,{waitUntil(p){pending=p;}});await pending;
   assert.equal(sent.length,1);assert.equal(sent[0].title,"测试事项");

@@ -23,9 +23,17 @@ export async function onRequestPut(context) {
   if (!Number.isInteger(revision) || revision < 1 || !isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
   try {
     const now = new Date().toISOString();
-    const write = await context.env.DB.prepare(
+    const writes = await context.env.DB.batch([context.env.DB.prepare(
       "UPDATE account_sync SET snapshot_data = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND revision = ?"
-    ).bind(JSON.stringify(body.snapshot), now, result.session.user_id, revision).run();
+    ).bind(JSON.stringify(body.snapshot), now, result.session.user_id, revision),
+      context.env.DB.prepare(`UPDATE reminder_snoozes SET active = 0, updated_at = ?
+        WHERE user_id = ? AND active = 1 AND NOT EXISTS (
+          SELECT 1 FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r
+          WHERE a.user_id = reminder_snoozes.user_id AND json_extract(r.value, '$.id') = reminder_snoozes.reminder_id
+            AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0
+        )`).bind(now, result.session.user_id)
+    ]);
+    const write = writes[0];
     if (!write.meta.changes) {
       const latest = await context.env.DB.prepare("SELECT snapshot_data, revision, updated_at FROM account_sync WHERE user_id = ?").bind(result.session.user_id).first();
       return json({ ok: false, conflict: true, revision: Number(latest.revision), snapshot: parseSnapshot(latest.snapshot_data), updatedAt: latest.updated_at }, { status: 409 });

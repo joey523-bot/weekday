@@ -1,3 +1,4 @@
+import { processSnoozeEntry } from "./snooze.js";
 import webpush from "web-push";
 import { getNextSalaryParts, normalizeSalaryDay } from "../../../scripts/utils/payday.js";
 import { isChinaWorkday, CalendarUnavailableError } from "../../../scripts/utils/workday-calendar.js";
@@ -7,7 +8,7 @@ const FIXED_TIMEZONE = "Asia/Shanghai";
 
 export default {
   async scheduled(controller, env, ctx) {
-    const [salaryRecords, reminderRecords, dailyRecords] = await Promise.all([
+    const [salaryRecords, reminderRecords, dailyRecords, snoozes] = await Promise.all([
       env.DB.prepare(
       `
         SELECT
@@ -52,10 +53,12 @@ export default {
         INNER JOIN salary_push_subscriptions subscriptions
           ON subscriptions.installation_id = rules.installation_id
         WHERE rules.enabled = 1 AND subscriptions.enabled = 1
-      `).all()
+      `).all(),
+      env.DB.prepare(`SELECT * FROM reminder_snoozes WHERE active=1 AND next_at<=?
+        AND (mode='once' OR until_at>?)`).bind(new Date().toISOString(), new Date().toISOString()).all()
     ]);
 
-    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length) {
+    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length) {
       return;
     }
 
@@ -65,7 +68,8 @@ export default {
     const jobs = [
       ...(salaryRecords.results || []).map((entry) => processSalaryEntry(entry, env)),
       ...(reminderRecords.results || []).map((entry) => processReminderEntry(entry, env)),
-      ...(dailyRecords.results || []).map((entry) => processDailyCountdownEntry(entry, env))
+      ...(dailyRecords.results || []).map((entry) => processDailyCountdownEntry(entry, env)),
+      ...(snoozes.results || []).map((entry) => processSnoozeEntry(entry, env))
     ];
     ctx.waitUntil(Promise.all(jobs));
   }

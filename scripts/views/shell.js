@@ -90,6 +90,27 @@ export function createShell() {
             <p id="reminderDetailState" class="form-note" aria-live="polite"></p>
             <button id="reminderDetailComplete" class="button button--primary" type="button">完成事项</button>
             <button id="reminderDetailEdit" class="button button--secondary" type="button">编辑事项</button>
+            <section id="snoozePanel" class="snooze-panel" aria-label="稍后提醒">
+              <p id="snoozeStatus" class="form-note" aria-live="polite"></p>
+              <details>
+                <summary>稍后提醒</summary>
+                <div class="snooze-options">
+                  <div class="snooze-presets">
+                    <button type="button" class="button button--secondary" data-snooze="10">10分钟后</button>
+                    <button type="button" class="button button--secondary" data-snooze="30">30分钟后</button>
+                    <button type="button" class="button button--secondary" data-snooze="60">1小时后</button>
+                  </div>
+                  <label for="snoozeAt">自选日期时间（北京时间）</label>
+                  <input id="snoozeAt" class="input" type="datetime-local" />
+                  <button type="button" class="button button--secondary" data-snooze="custom">按所选时间提醒一次</button>
+                  <label for="snoozeUntil">每小时提醒，截止到（北京时间）</label>
+                  <input id="snoozeUntil" class="input" type="datetime-local" />
+                  <button type="button" class="button button--secondary" data-snooze="hourly">开启每小时提醒</button>
+                  <p class="form-note">首次在1小时后提醒。默认截止今天22点；22点后请自选截止时间。完成事项或停止循环后不再补提醒。到点后可能延迟几分钟送达。</p>
+                </div>
+              </details>
+              <button id="snoozeStop" class="button button--link" type="button" data-snooze="stop" hidden>停止循环</button>
+            </section>
           </div>
         </dialog>
 

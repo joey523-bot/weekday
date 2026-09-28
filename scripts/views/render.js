@@ -1,3 +1,4 @@
+import { isReminderDue } from "../utils/snooze.js";
 import { APP_THEMES, REMINDER_FILTERS, WEATHER_CODES } from "../config.js";
 import {
   formatCountdown,
@@ -614,7 +615,8 @@ export function renderOverviewReminderPreview(state, refs) {
 
 function renderReminderItem(entry, { preview = false } = {}) {
   const days = getDaysUntil(entry.date);
-  const tone = entry.completed ? "completed" : getReminderTone(days);
+  const due = isReminderDue(entry);
+  const tone = entry.completed ? "completed" : due ? "due" : getReminderTone(days);
   const schedule = entry.completed
     ? `完成于 ${formatCompletedAt(entry.completedAt)}`
     : days < 0
@@ -643,7 +645,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
           <span class="badge">${escapeHtml(entry.category)}</span>
           <h3 class="reminder-item__title" title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</h3>
         </div>
-        <p class="reminder-item__meta">${escapeHtml(schedule)}</p>
+        <p class="reminder-item__meta">${due ? '<strong class="reminder-due-label">到点未完成 · </strong>' : ""}${escapeHtml(schedule)}</p>
         <p class="reminder-item__notification">${escapeHtml(notification)}</p>
         ${entry.notes ? `<p class="reminder-item__notes">${escapeHtml(entry.notes)}</p>` : ""}
       </div>
@@ -668,7 +670,8 @@ function getSortedReminders(reminders) {
     if (left.completed) {
       return String(right.completedAt || "").localeCompare(String(left.completedAt || ""));
     }
-    return left.date.localeCompare(right.date);
+    const dueOrder = Number(isReminderDue(right)) - Number(isReminderDue(left));
+    return dueOrder || left.date.localeCompare(right.date) || Number(left.hour) - Number(right.hour);
   });
 }
 

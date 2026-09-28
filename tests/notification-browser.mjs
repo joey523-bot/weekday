@@ -93,7 +93,8 @@ try {
     await open(page);
     await page.click('#reminderDetailClose');
     await page.evaluate(() => { location.hash = 'reminder=r2&notification=1'; });
-    await page.getByRole('heading', { name: '测试事项二', exact: true }).waitFor();
+    await page.locator('#reminderDetail[open]').waitFor();
+    assert.equal(await page.locator('#reminderDetailTitle').textContent(), '测试事项二');
     await page.click('#reminderDetailClose');
     await page.evaluate(() => { location.hash = 'reminder=r2&notification=2'; });
     await page.locator('#reminderDetail[open]').waitFor();
@@ -227,6 +228,22 @@ try {
       assert.equal(await page.locator('#reminderDetail').evaluate(el => el.open), false);
     });
   }
+  await scenario('device-only push state during detail loading never blocks account lookup', async (page) => {
+    await page.goto(origin);
+    await page.locator('#overviewReminderList [data-reminder-detail="r1"]').waitFor();
+    await page.route('**/api/account/sync', async route => {
+      if (route.request().method() === 'GET') {
+        await page.evaluate(async () => {
+          const state = await import('/scripts/state.js');
+          state.updateSalary({ notification: { lastError: '设备本地状态变化' } });
+        });
+      }
+      await route.fallback();
+    });
+    await page.locator('#overviewReminderList [data-reminder-detail="r1"] .reminder-item__title').click();
+    await page.locator('#reminderDetail[open]').waitFor();
+    assert.equal(await page.locator('#reminderDetailTitle').textContent(), '测试事项一');
+  });
   console.log(`${count} browser scenarios passed; fixture APIs only.`);
 } finally {
   await browser?.close();

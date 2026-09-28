@@ -1956,3 +1956,13 @@ button.weather-peek__content {
 .reminder-detail__close > span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #eef0ef; color: #75817c; }
 
 #reminderDetailTitle:focus { outline: none; }
+
+.snooze-panel { border-top: 1px solid var(--border, #e5e8e6); padding-top: 14px; }
+.snooze-panel[hidden], .snooze-panel [hidden] { display: none; }
+.snooze-panel summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+.snooze-options { display: grid; gap: 12px; padding-top: 8px; }
+.snooze-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.snooze-presets .button { flex: 1; min-height: 44px; padding: 10px 8px; font-size: 14px; }
+.snooze-options input { min-width: 0; width: 100%; box-sizing: border-box; }
+.reminder-item.reminder-item--due { border: 1px solid #bc7049; background: #fff7ef; }
+.reminder-due-label { color: #954a26; }

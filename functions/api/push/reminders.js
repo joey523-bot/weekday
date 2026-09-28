@@ -31,7 +31,8 @@ export async function onRequestPost(context) {
 
   const now = new Date().toISOString();
   const statements = [
-    context.env.DB.prepare("DELETE FROM reminder_push_rules WHERE installation_id = ?").bind(payload.installationId),
+    context.env.DB.prepare(`DELETE FROM reminder_push_rules WHERE installation_id = ?
+      AND reminder_id NOT IN (SELECT value FROM json_each(?))`).bind(payload.installationId, JSON.stringify(payload.reminders.map(r => r.reminderId))),
     ...payload.reminders.map((entry) =>
       context.env.DB
         .prepare(
@@ -40,6 +41,9 @@ export async function onRequestPost(context) {
               installation_id, reminder_id, title, category, reminder_date,
               lead_days, reminder_hour, enabled, last_sent_key, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, '', ?, ?)
+            ON CONFLICT(installation_id, reminder_id) DO UPDATE SET
+              title=excluded.title, category=excluded.category, reminder_date=excluded.reminder_date,
+              lead_days=excluded.lead_days, reminder_hour=excluded.reminder_hour, enabled=1, updated_at=excluded.updated_at
           `
         )
         .bind(
