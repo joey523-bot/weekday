@@ -165,10 +165,9 @@ async function processReminderEntry(entry, env) {
     return;
   }
 
-  const reminder = buildCustomReminderCopy(entry, Number(entry.lead_days || 0));
   const payload = JSON.stringify({
-    title: reminder.title,
-    body: reminder.body,
+    title: entry.title,
+    body: buildCustomReminderBody(entry, Number(entry.lead_days || 0)),
     tag: `reminder-${entry.reminder_id}-${noticeDate}`,
     url: env.APP_URL || "/"
   });
@@ -299,17 +298,10 @@ function buildReminderCopy(daysUntil, targetSalary) {
   };
 }
 
-function buildCustomReminderCopy(entry, leadDays) {
-  const category = entry.category ? ` · ${entry.category}` : "";
+// Preserve the existing production custom-reminder copy in this payday-only release.
+function buildCustomReminderBody(entry, leadDays) {
   if (leadDays === 0) {
-    return {
-      title: `今天记得处理「${entry.title}」`,
-      body: `给自己留出的这件事${category}`
-    };
+    return `今天需要处理：${entry.title}${entry.category ? `（${entry.category}）` : ""}。`;
   }
-
-  return {
-    title: `「${entry.title}」快到了`,
-    body: `还有 ${leadDays} 天，提前留一点时间给它${category}`
-  };
+  return `${leadDays} 天后需要处理：${entry.title}${entry.category ? `（${entry.category}）` : ""}。`;
 }

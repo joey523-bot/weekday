@@ -63,3 +63,7 @@ Node 24环境，先在 `workers/salary-notifier` 依锁文件安装依赖（`npm
 若修复已在其他开发分支合并，需要撤销时使用 `git revert <本次修复提交>`，保留历史，重新运行测试；不得使用强制reset覆盖其他人的工作。修复提交编号见项目 `2-需求与版本/01_BIZ-001本地修复验证记录.md`。未来生产回滚须另行授权并按Pages与Worker协调执行；本轮没有部署回滚操作。
 
 Worker构建验证：Wrangler 4.100.0使用示例配置执行`deploy --dry-run`成功生成本地产物（270.47 KiB），未上传。原附件esbuild副本启动异常；临时目录下载同版本官方`@esbuild/darwin-arm64@0.27.3`后，通过`ESBUILD_BINARY_PATH`指定完成打包，未修改仓库依赖/锁文件。沙箱拒绝写用户Library下的Wrangler日志，但不影响dry-run完成及本地产物生成。
+
+## 发布前生产差异核对（2026-09-28）
+
+用户随后授权发布试用。Cloudflare登录成功，生产Pages基线99bee61；Worker版本43e449e0-d415-4409-af86-1d884e1f26f4仍使用7月普通事项文案。为保持BIZ-001范围，发布候选恢复普通事项原有标题/正文，增加精确文案回归断言。生产Cron、绑定和Secret保持原状；使用Worker版本上传/激活，避免修改脚本级配置。GitHub命令行未登录，采用Cloudflare现有Pages项目直接部署，不推送GitHub。实际部署ID和版本在项目发布记录中保存。

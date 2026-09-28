@@ -146,7 +146,8 @@ test("scheduler still sends custom reminder when salary calendar is unavailable"
   env.DB.prepare=sql=> sql.includes("SELECT") ? {async all(){return {results: sql.includes("INNER JOIN")
     ? [{...entry, reminder_id:"r1",title:"测试事项",reminder_date:"2027-01-05",last_sent_key:""}] : [entry]};}} : original(sql);
   let pending;await worker.scheduled({},env,{waitUntil(p){pending=p;}});await pending;
-  assert.equal(sent.length,1);assert.match(sent[0].title,/测试事项/);
+  assert.equal(sent.length,1);assert.equal(sent[0].title,"测试事项");
+  assert.equal(sent[0].body,"今天需要处理：测试事项。");
 });
 
 test("offline cache includes shared calendar and all precache paths exist", () => {
