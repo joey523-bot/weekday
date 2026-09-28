@@ -864,7 +864,7 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
   routeLoading = true;
   const dialog = document.querySelector("#reminderDetail");
   if (dialog.open) dialog.close();
-  setActiveView(refs, "reminders");
+  if (consumeRoute) setActiveView(refs, "reminders");
   refs.reminderBoardState.textContent = "正在加载提醒事项…";
   try {
     await flushAccountSync();
@@ -886,10 +886,12 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
     const reminder = remote.snapshot?.reminders?.find((item) => item.id === id);
     if (consumeRoute) history.replaceState(null, "", window.location.pathname + window.location.search);
     if (!reminder) {
+      setActiveView(refs, "reminders");
       refs.reminderBoardState.textContent = "该事项已删除或当前账号无权访问，请在事项列表中查看其他事项。";
       return;
     }
     detailReminderId = id;
+    document.querySelector("#reminderDetailClose").textContent = activeView === "overview" ? "关闭" : "返回事项列表";
     document.querySelector("#reminderDetailTitle").textContent = reminder.title;
     document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · ${reminder.completed ? "已完成" : "待处理"}`;
     document.querySelector("#reminderDetailNotes").textContent = reminder.notes || "暂无备注";
@@ -900,7 +902,10 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
     refs.reminderBoardState.textContent = "";
     dialog.showModal();
   } catch (error) {
-    if (version === routeVersion) refs.reminderBoardState.textContent = `暂时无法打开提醒事项：${error.message}`;
+    if (version === routeVersion) {
+      setActiveView(refs, "reminders");
+      refs.reminderBoardState.textContent = `暂时无法打开提醒事项：${error.message}`;
+    }
   } finally {
     if (version === routeVersion) routeLoading = false;
   }

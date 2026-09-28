@@ -157,16 +157,23 @@ try {
     await page.click('#reminderDetailComplete');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[1].completed, true);
+    assert.equal(await page.locator('[data-view="overview"]').isVisible(), true);
+    assert.equal(await text(page, '#reminderDetailClose'), '关闭');
     await page.click('#reminderDetailClose');
-    await page.locator('[data-tab-button][data-switch-view="overview"]').click();
+    assert.equal(await page.locator('[data-view="overview"]').isVisible(), true);
     await page.setViewportSize({ width: 1280, height: 900 }); // Existing View control is desktop-only.
     await page.locator('#overviewReminderList [data-action="detail"][data-id="r1"]').click();
     await page.locator('#reminderDetail[open]').waitFor();
     assert.equal(await text(page, '#reminderDetailTitle'), '测试事项一');
+    assert.equal(await page.locator('[data-view="overview"]').isVisible(), true);
+    await page.click('#reminderDetailEdit');
+    assert.equal(await page.locator('[data-view="compose"]').isVisible(), true);
+    assert.equal(await page.inputValue('#reminderTitleInput'), '测试事项一');
   });
   await scenario('list keyboard opens correct detail and existing editor', async page => {
     await page.goto(origin);
     await page.locator('[data-tab-button][data-switch-view="reminders"]').click();
+    await page.waitForFunction(() => document.activeElement?.matches('[data-view="reminders"] h1'));
     const body = page.locator('#reminderList [data-reminder-detail="r2"] .reminder-item__body');
     await body.focus(); await body.press('Enter');
     await page.locator('#reminderDetail[open]').waitFor();
