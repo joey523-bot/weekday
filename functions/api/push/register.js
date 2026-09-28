@@ -26,7 +26,7 @@ export async function onRequestPost(context) {
   const now = new Date().toISOString();
   const userAgent = context.request.headers.get("user-agent") || "";
 
-  await context.env.DB.prepare(
+  const subscriptionStatement = context.env.DB.prepare(
     `
       INSERT INTO salary_push_subscriptions (
         installation_id,
@@ -76,8 +76,17 @@ export async function onRequestPost(context) {
       session.session.user_id,
       now,
       now
-    )
-    .run();
+    );
+
+  const statements = [subscriptionStatement];
+  if (payload.dailyCountdownEnabled !== undefined) {
+    statements.push(context.env.DB.prepare(`
+      INSERT INTO salary_daily_push_rules (installation_id, enabled, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(installation_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at
+    `).bind(payload.installationId, payload.dailyCountdownEnabled ? 1 : 0, now));
+  }
+  await context.env.DB.batch(statements);
 
   return json({
     ok: true,

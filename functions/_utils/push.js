@@ -13,6 +13,7 @@ export function normalizePushPayload(payload) {
 
   return {
     installationId,
+    dailyCountdownEnabled: typeof payload?.dailyCountdownEnabled === "boolean" ? payload.dailyCountdownEnabled : undefined,
     endpoint,
     p256dh,
     auth,

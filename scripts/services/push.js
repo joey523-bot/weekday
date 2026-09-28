@@ -38,7 +38,7 @@ export async function getCurrentPushSubscription() {
   return registration.pushManager.getSubscription();
 }
 
-export async function enableSalaryPushNotifications({ day, leadDays, hour }) {
+export async function enableSalaryPushNotifications({ day, leadDays, hour, dailyCountdownEnabled = false }) {
   if (!supportsPushNotifications()) {
     throw new Error("当前环境不支持推送通知");
   }
@@ -65,6 +65,7 @@ export async function enableSalaryPushNotifications({ day, leadDays, hour }) {
     salaryDay: day,
     leadDays,
     reminderHour: hour,
+    dailyCountdownEnabled,
     permission,
     appName: APP_META.productName
   });
@@ -75,7 +76,7 @@ export async function enableSalaryPushNotifications({ day, leadDays, hour }) {
   };
 }
 
-export async function syncSalaryPushRule({ day, leadDays, hour }) {
+export async function syncSalaryPushRule({ day, leadDays, hour, dailyCountdownEnabled = false }) {
   const subscription = await getCurrentPushSubscription();
   if (!subscription) {
     return null;
@@ -87,6 +88,7 @@ export async function syncSalaryPushRule({ day, leadDays, hour }) {
     salaryDay: day,
     leadDays,
     reminderHour: hour,
+    dailyCountdownEnabled,
     permission: Notification.permission,
     appName: APP_META.productName
   });

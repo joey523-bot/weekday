@@ -1,13 +1,13 @@
 import webpush from "web-push";
 import { getNextSalaryParts, normalizeSalaryDay } from "../../../scripts/utils/payday.js";
-import { CalendarUnavailableError } from "../../../scripts/utils/workday-calendar.js";
+import { isChinaWorkday, CalendarUnavailableError } from "../../../scripts/utils/workday-calendar.js";
 
 const DAY_MS = 86400000;
 const FIXED_TIMEZONE = "Asia/Shanghai";
 
 export default {
   async scheduled(controller, env, ctx) {
-    const [salaryRecords, reminderRecords] = await Promise.all([
+    const [salaryRecords, reminderRecords, dailyRecords] = await Promise.all([
       env.DB.prepare(
       `
         SELECT
@@ -44,10 +44,18 @@ export default {
             ON subscriptions.installation_id = rules.installation_id
           WHERE rules.enabled = 1 AND subscriptions.enabled = 1
         `
-      ).all()
+      ).all(),
+      env.DB.prepare(`
+        SELECT subscriptions.*, rules.last_sent_key AS daily_last_sent_key,
+          rules.enabled AS daily_enabled
+        FROM salary_daily_push_rules rules
+        INNER JOIN salary_push_subscriptions subscriptions
+          ON subscriptions.installation_id = rules.installation_id
+        WHERE rules.enabled = 1 AND subscriptions.enabled = 1
+      `).all()
     ]);
 
-    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length) {
+    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length) {
       return;
     }
 
@@ -56,11 +64,76 @@ export default {
 
     const jobs = [
       ...(salaryRecords.results || []).map((entry) => processSalaryEntry(entry, env)),
-      ...(reminderRecords.results || []).map((entry) => processReminderEntry(entry, env))
+      ...(reminderRecords.results || []).map((entry) => processReminderEntry(entry, env)),
+      ...(dailyRecords.results || []).map((entry) => processDailyCountdownEntry(entry, env))
     ];
     ctx.waitUntil(Promise.all(jobs));
   }
 };
+
+// Daily countdown has its own opt-in and delivery key. Existing salary/reminder rules are untouched.
+export async function processDailyCountdownEntry(entry, env, now = new Date()) {
+  if (Number(entry.daily_enabled) !== 1 || Number(entry.enabled) !== 1) return;
+  const local = getLocalParts(now, FIXED_TIMEZONE);
+  // Cron runs every five minutes; allow retries during the 10:00 hour only.
+  if (local.hour !== 10) return;
+  let target;
+  try {
+    if (!isChinaWorkday(local)) return;
+    target = getNextSalaryParts(local, normalizeSalaryDay(entry.salary_day));
+  } catch (error) {
+    if (!(error instanceof CalendarUnavailableError)) throw error;
+    console.warn(error.message);
+    return;
+  }
+  const cycleKey = toCycleKey(local);
+  if (entry.daily_last_sent_key === cycleKey) return;
+  const stamp = now.toISOString();
+  // Atomically reserve this device/day before calling the push provider. Concurrent cron runs
+  // cannot both send; re-check the live switches to handle stale scheduler snapshots.
+  const claim = await env.DB.prepare(`
+    UPDATE salary_daily_push_rules
+    SET last_sent_key = ?, updated_at = ?
+    WHERE installation_id = ? AND enabled = 1 AND last_sent_key != ?
+      AND EXISTS (SELECT 1 FROM salary_push_subscriptions
+        WHERE installation_id = ? AND enabled = 1)
+  `).bind(cycleKey, stamp, entry.installation_id, cycleKey, entry.installation_id).run();
+  if (claim.meta?.changes !== 1) return;
+  const days = daysBetween(local, target);
+  const payload = JSON.stringify({
+    title: days === 0 ? "今天发工资" : `距离发工资还有${days}天`,
+    body: days === 0 ? "今天是本次实际发薪日。" : `下次发薪日：${target.month}月${target.day}日。`,
+    tag: `salary-daily-${cycleKey}`,
+    url: env.APP_URL || "/"
+  });
+  try {
+    await webpush.sendNotification({
+      endpoint: entry.endpoint, keys: { p256dh: entry.p256dh, auth: entry.auth }
+    }, payload);
+  } catch (error) {
+    await recordDeliveryAttempt(env, {
+      installationId: entry.installation_id, eventType: "salary_daily", cycleKey,
+      status: "failed", detail: describePushError(error)
+    });
+    if (error?.statusCode === 404 || error?.statusCode === 410) {
+      await env.DB.prepare("UPDATE salary_push_subscriptions SET enabled = 0, updated_at = ? WHERE installation_id = ?")
+        .bind(stamp, entry.installation_id).run();
+    } else if (Number(error?.statusCode) >= 400) {
+      // Provider explicitly rejected the request: permit another attempt this hour.
+      await env.DB.prepare(`UPDATE salary_daily_push_rules SET last_sent_key = ''
+        WHERE installation_id = ? AND last_sent_key = ?`)
+        .bind(entry.installation_id, cycleKey).run();
+    }
+    // Transport failure may have delivered. Keep the reservation rather than duplicate it.
+    return;
+  }
+  await env.DB.prepare(`UPDATE salary_daily_push_rules SET last_sent_at = ?, updated_at = ?
+    WHERE installation_id = ? AND last_sent_key = ?`)
+    .bind(stamp, stamp, entry.installation_id, cycleKey).run();
+  await recordDeliveryAttempt(env, {
+    installationId: entry.installation_id, eventType: "salary_daily", cycleKey, status: "sent"
+  });
+}
 
 export async function processSalaryEntry(entry, env, now = new Date()) {
   const local = getLocalParts(now, entry.timezone || FIXED_TIMEZONE);

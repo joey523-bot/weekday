@@ -237,6 +237,7 @@ export function createShell() {
               <div class="settings-list">
                 <label class="settings-list__row"><span class="settings-list__label">提前天数</span><input id="pushLeadDaysInput" name="pushLeadDays" class="input settings-list__input" type="number" min="0" max="7" value="0" /></label>
                 <label class="settings-list__row"><span class="settings-list__label">工资推送时刻</span><select id="pushHourSelect" name="pushHour" class="select settings-list__input">${hourOptions()}</select></label>
+                <label class="settings-list__row"><span class="settings-list__label">工作日10:00发薪倒计时</span><input id="dailyCountdownInput" type="checkbox" aria-describedby="dailyCountdownNote" /></label>
                 <div class="settings-list__row"><span class="settings-list__label">权限</span><span id="pushPermissionLabel">未请求</span></div>
               </div>
               <div class="notification-panel__actions">
@@ -244,6 +245,7 @@ export function createShell() {
                 <button id="pushTestButton" class="button button--secondary" type="button">测试通知</button>
                 <button id="pushDisableButton" class="button button--secondary" type="button">关闭所有提醒</button>
               </div>
+              <p id="dailyCountdownNote" class="form-note">默认关闭，仅本设备生效。开启后按北京时间在实际工作日10:00提醒，含调休；不影响原工资和事项提醒。未开启通知时，请先开启通知并同步。</p>
               <p id="pushSyncState" class="form-note">--</p>
             </article>
 

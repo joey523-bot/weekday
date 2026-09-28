@@ -392,6 +392,21 @@ function bindEvents(refs) {
     setActiveView(refs, "reminders");
   });
 
+  refs.dailyCountdownInput.addEventListener("change", async () => {
+    refs.dailyCountdownInput.dataset.syncing = "true";
+    refs.dailyCountdownInput.disabled = true;
+    try {
+      updateSalary({ notification: {
+        ...getState().salary.notification,
+        dailyCountdownEnabled: refs.dailyCountdownInput.checked
+      } });
+      await syncExistingPushSubscription(refs);
+    } finally {
+      delete refs.dailyCountdownInput.dataset.syncing;
+      renderAll(refs);
+    }
+  });
+
   refs.pushEnableButton.addEventListener("click", async () => {
     await enablePushAndSync(refs);
   });
@@ -955,9 +970,11 @@ async function syncExistingPushSubscription(refs) {
     const result = await syncSalaryPushRule({
       day: getState().salary.day,
       leadDays: notification.leadDays,
-      hour: notification.hour
+      hour: notification.hour,
+      dailyCountdownEnabled: notification.dailyCountdownEnabled
     });
 
+    if (!result?.endpoint) throw new Error("本设备通知订阅已失效，请重新开启通知");
     await syncReminderPushRules({ reminders: getState().reminders });
 
     if (result?.endpoint) {
@@ -999,7 +1016,8 @@ async function enablePushAndSync(refs) {
     const result = await enableSalaryPushNotifications({
       day: state.salary.day,
       leadDays: nextNotification.leadDays,
-      hour: nextNotification.hour
+      hour: nextNotification.hour,
+      dailyCountdownEnabled: nextNotification.dailyCountdownEnabled
     });
 
     updateSalary({
@@ -1033,6 +1051,7 @@ async function enablePushAndSync(refs) {
 
 function getNotificationFormState(refs) {
   return {
+    dailyCountdownEnabled: refs.dailyCountdownInput.checked,
     leadDays: Number(refs.pushLeadDaysInput.value) || 0,
     hour: Number(refs.pushHourSelect.value) || 0,
     timezone: "Asia/Shanghai",

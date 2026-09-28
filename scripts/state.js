@@ -257,6 +257,7 @@ function normalizeState(raw) {
       notification: {
         ...base.salary.notification,
         ...(raw?.salary?.notification || {}),
+        dailyCountdownEnabled: raw?.salary?.notification?.dailyCountdownEnabled === true,
         leadDays: clampLeadDays(raw?.salary?.notification?.leadDays),
         hour: clampReminderHour(raw?.salary?.notification?.hour),
         timezone: String(raw?.salary?.notification?.timezone || base.salary.notification.timezone),

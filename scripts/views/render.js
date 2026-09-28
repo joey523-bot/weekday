@@ -34,6 +34,7 @@ export function createRefs(root) {
     pushSupportNote: root.querySelector("#pushSupportNote"),
     pushLeadDaysInput: root.querySelector("#pushLeadDaysInput"),
     pushHourSelect: root.querySelector("#pushHourSelect"),
+    dailyCountdownInput: root.querySelector("#dailyCountdownInput"),
     pushPermissionLabel: root.querySelector("#pushPermissionLabel"),
     pushEnableButton: root.querySelector("#pushEnableButton"),
     pushTestButton: root.querySelector("#pushTestButton"),
@@ -224,6 +225,8 @@ export function renderPushPanel(state, refs, capabilities) {
 
   refs.pushLeadDaysInput.value = String(notification.leadDays);
   refs.pushHourSelect.value = String(notification.hour);
+  refs.dailyCountdownInput.checked = notification.dailyCountdownEnabled === true;
+  refs.dailyCountdownInput.disabled = !capabilities.supported || refs.dailyCountdownInput.dataset.syncing === "true";
   refs.pushPermissionLabel.textContent = permissionText;
   refs.pushEnableButton.textContent = notification.enabled ? "重新同步提醒" : "开启通知并同步";
   refs.pushEnableButton.disabled = !capabilities.supported;
@@ -255,6 +258,12 @@ export function renderPushPanel(state, refs, capabilities) {
   refs.pushSupportNote.textContent = capabilities.standalone
     ? "可直接申请通知权限。"
     : "iPhone 需先添加到主屏幕后再申请通知。";
+
+  if (notification.lastError) {
+    refs.pushStatusBadge.textContent = "同步失败";
+    refs.pushSyncState.textContent = `设置尚未确认生效：${notification.lastError}。请点击重新同步提醒重试。`;
+    return;
+  }
 
   if (notification.enabled) {
     refs.pushStatusBadge.textContent = "提醒已同步";
