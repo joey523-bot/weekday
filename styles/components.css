@@ -1949,6 +1949,8 @@ button.weather-peek__content {
 .reminder-item__body[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
 
 .reminder-detail { position: fixed; }
-.reminder-detail__close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--text-muted); font: 32px/1 sans-serif; cursor: pointer; }
+.reminder-detail__close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; box-shadow: none; color: var(--text-muted); cursor: pointer; }
 .reminder-detail__close:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
 #reminderDetailTitle { padding-right: 32px; }
+
+.reminder-detail__close > span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #eef0ef; color: #75817c; }

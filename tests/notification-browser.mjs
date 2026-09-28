@@ -75,7 +75,10 @@ try {
     const box = await close.boundingBox(), dialogBox = await page.locator('#reminderDetail').boundingBox();
     assert.ok(box.width >= 44 && box.height >= 44);
     assert.ok(box.y < dialogBox.y + 20 && box.x + box.width > dialogBox.x + dialogBox.width - 20);
-    await page.screenshot({ path: '/tmp/rem001-close-detail.png' });
+    assert.equal(await close.locator('span').evaluate(el => getComputedStyle(el).borderRadius), '50%');
+    assert.equal(await close.locator('svg').count(), 1);
+    await page.locator('#reminderDetailTitle').click(); // Show the resting appearance without keyboard focus.
+    await page.screenshot({ path: '/tmp/rem001-close-b.png' });
     await page.click('#reminderDetailComplete');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[0].completed, true);

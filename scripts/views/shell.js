@@ -82,7 +82,7 @@ export function createShell() {
         </section>
 
         <dialog id="reminderDetail" class="reminder-detail" aria-labelledby="reminderDetailTitle">
-          <button id="reminderDetailClose" class="reminder-detail__close" type="button" aria-label="关闭" title="关闭"><span aria-hidden="true">×</span></button>
+          <button id="reminderDetailClose" class="reminder-detail__close" type="button" aria-label="关闭" title="关闭"><span aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3L13 13M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span></button>
           <div class="stack-form">
             <h2 id="reminderDetailTitle"></h2>
             <p id="reminderDetailMeta" class="form-note"></p>
