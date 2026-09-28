@@ -8,7 +8,7 @@ export function createShell() {
       <header class="app-header">
         <div class="brand-lockup">
           <button class="brand" data-switch-view="overview" type="button" aria-label="返回星期首页">
-            <span class="brand__mark" aria-hidden="true"><img src="./assets/icons/app-icon-star-192.png?v=20260928.1" alt="" width="38" height="38" /></span>
+            <span class="brand__mark" aria-hidden="true"><img src="./assets/icons/app-icon-star-192.png?v=20260928.2" alt="" width="38" height="38" /></span>
             <span>星期</span>
           </button>
           <p id="todayLabel">--</p>
@@ -80,6 +80,18 @@ export function createShell() {
             </article>
           </div>
         </section>
+
+        <dialog id="reminderDetail" class="reminder-detail" aria-labelledby="reminderDetailTitle">
+          <div class="stack-form">
+            <h2 id="reminderDetailTitle"></h2>
+            <p id="reminderDetailMeta" class="form-note"></p>
+            <p id="reminderDetailNotes" class="reminder-detail__notes"></p>
+            <p id="reminderDetailState" class="form-note" aria-live="polite"></p>
+            <button id="reminderDetailComplete" class="button button--primary" type="button">完成事项</button>
+            <button id="reminderDetailEdit" class="button button--secondary" type="button">编辑事项</button>
+            <button id="reminderDetailClose" class="button button--secondary" type="button">返回事项列表</button>
+          </div>
+        </dialog>
 
         <section class="view view--reminders" data-view="reminders" hidden>
           <header class="page-intro">
@@ -291,7 +303,7 @@ export function createAuthShell() {
     <div class="page-noise"></div>
     <main class="auth-screen" aria-labelledby="authTitle">
       <section class="auth-screen__intro">
-        <div class="auth-brand"><span class="auth-brand__mark"><img src="./assets/icons/app-icon-star-192.png?v=20260928.1" alt="" width="42" height="42" /></span><span>星期</span></div>
+        <div class="auth-brand"><span class="auth-brand__mark"><img src="./assets/icons/app-icon-star-192.png?v=20260928.2" alt="" width="42" height="42" /></span><span>星期</span></div>
         <p class="auth-screen__eyebrow">使用前请先登录</p>
         <h1 id="authTitle">先登录，<br /><em>再开启星期。</em></h1>
         <p class="auth-screen__lead">记录发薪日、重要事项和提醒；登录后自动同步到你的其他设备。</p>
