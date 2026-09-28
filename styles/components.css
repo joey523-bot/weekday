@@ -1954,3 +1954,5 @@ button.weather-peek__content {
 #reminderDetailTitle { padding-right: 32px; }
 
 .reminder-detail__close > span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #eef0ef; color: #75817c; }
+
+#reminderDetailTitle:focus { outline: none; }

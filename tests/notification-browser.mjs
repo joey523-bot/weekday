@@ -77,8 +77,11 @@ try {
     assert.ok(box.y < dialogBox.y + 20 && box.x + box.width > dialogBox.x + dialogBox.width - 20);
     assert.equal(await close.locator('span').evaluate(el => getComputedStyle(el).borderRadius), '50%');
     assert.equal(await close.locator('svg').count(), 1);
-    await page.locator('#reminderDetailTitle').click(); // Show the resting appearance without keyboard focus.
-    await page.screenshot({ path: '/tmp/rem001-close-b.png' });
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'reminderDetailTitle');
+    assert.equal(await close.evaluate(el => el.matches(':focus-visible')), false);
+    await page.screenshot({ path: '/tmp/rem001-no-default-focus.png' });
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'reminderDetailComplete');
     await page.click('#reminderDetailComplete');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[0].completed, true);
