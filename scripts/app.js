@@ -66,6 +66,11 @@ let accountSyncPaused = false;
 let accountRevision = 0;
 let activeAccount = null;
 let accountDirty = false;
+let accountSavePromise = null;
+let accountChangeVersion = 0;
+let routeVersion = 0;
+let detailReminderId = null;
+let routeLoading = false;
 const CUSTOM_THEME_VARIABLES = [
   "--bg", "--surface", "--surface-strong", "--surface-muted", "--text", "--text-muted", "--text-soft",
   "--text-inverse", "--accent", "--accent-strong", "--accent-soft", "--accent-warm", "--accent-warm-soft",
@@ -98,17 +103,21 @@ async function startApplication(root) {
 
   populateSalaryOptions(refs.salaryDaySelect, state.salary.day);
   bindEvents(refs);
-  await hydrateAccountData(refs);
+  if (!new URLSearchParams(window.location.hash.slice(1)).has("reminder")) await hydrateAccountData(refs);
   renderAll(refs);
+  bindReminderNavigation(refs);
+  await openNotificationReminder(refs);
   registerServiceWorker();
   hydratePushSubscription(refs);
   hydrateDefaultWeather(refs, getState());
   window.addEventListener("yoyuan:state-changed", () => {
+    if (accountSyncPaused) return;
     accountDirty = true;
+    accountChangeVersion += 1;
     scheduleAccountSync(refs);
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible" || routeLoading || detailReminderId) return;
     if (accountDirty) {
       scheduleAccountSync(refs);
       return;
@@ -661,7 +670,7 @@ function registerServiceWorker() {
     window.location.reload();
   });
 
-  window.addEventListener("load", async () => {
+  const register = async () => {
     try {
       const registration = await navigator.serviceWorker.register("./sw.js", {
         updateViaCache: "none"
@@ -675,7 +684,9 @@ function registerServiceWorker() {
     } catch (error) {
       console.warn("Service worker registration failed", error);
     }
-  });
+  };
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
 }
 
 async function refreshAppAssetsAndReload(refs) {
@@ -725,7 +736,7 @@ async function hydrateAccountData(refs, { preserveLocal = false } = {}) {
   try {
     const remote = await loadAccountSnapshot();
     if (!remote.snapshot) return;
-    if (preserveLocal && remote.revision === accountRevision) return;
+    if (preserveLocal && (accountDirty || routeLoading || detailReminderId || remote.revision === accountRevision)) return;
     accountSyncPaused = true;
     replaceSyncedData(remote.snapshot);
     accountRevision = remote.revision;
@@ -742,25 +753,118 @@ async function hydrateAccountData(refs, { preserveLocal = false } = {}) {
 function scheduleAccountSync(refs) {
   if (accountSyncPaused || !activeAccount) return;
   window.clearTimeout(accountSyncTimer);
-  accountSyncTimer = window.setTimeout(async () => {
-    if (!navigator.onLine) return;
+  accountSyncTimer = window.setTimeout(() => {
+    flushAccountSync().catch((error) => console.warn("Account sync save failed", error));
+  }, 800);
+}
+
+async function flushAccountSync() {
+  window.clearTimeout(accountSyncTimer);
+  while (accountSavePromise) await accountSavePromise;
+  if (!accountDirty) return;
+  if (!navigator.onLine) throw new Error("当前离线，请联网后重试同步。");
+  const version = accountChangeVersion;
+  const snapshot = getSyncSnapshot();
+  accountSavePromise = (async () => {
+    const result = await saveAccountSnapshot(snapshot, accountRevision);
+    if (result.conflict) {
+      // Do not overwrite a newer device snapshot while handling a notification.
+      throw new Error("其他设备已更新事项，请刷新后确认最新状态。");
+    }
+    accountRevision = result.revision;
+    if (accountChangeVersion === version) accountDirty = false;
+  })();
+  try {
+    await accountSavePromise;
+  } finally {
+    accountSavePromise = null;
+  }
+}
+
+function bindReminderNavigation(refs) {
+  const dialog = document.querySelector("#reminderDetail");
+  window.addEventListener("hashchange", () => openNotificationReminder(refs));
+  dialog.addEventListener("close", () => { if (!dialog.open) detailReminderId = null; });
+  document.querySelector("#reminderDetailClose").addEventListener("click", () => dialog.close());
+  document.querySelector("#reminderDetailEdit").addEventListener("click", () => {
+    const reminder = getState().reminders.find((item) => item.id === detailReminderId);
+    dialog.close();
+    if (reminder) openReminderEditor(refs, reminder);
+  });
+  document.querySelector("#reminderDetailComplete").addEventListener("click", async () => {
+    const id = detailReminderId;
+    const reminder = getState().reminders.find((item) => item.id === id);
+    if (!reminder) return;
+    const button = document.querySelector("#reminderDetailComplete");
+    const status = document.querySelector("#reminderDetailState");
+    button.disabled = true;
+    status.textContent = "正在同步完成状态…";
+    if (!reminder.completed) setReminderCompletion(id, true);
+    renderAll(refs);
     try {
-      const snapshot = getSyncSnapshot();
-      const result = await saveAccountSnapshot(snapshot, accountRevision);
-      if (result.conflict) {
-        accountSyncPaused = true;
-        accountRevision = result.revision;
-        const retry = await saveAccountSnapshot(snapshot, accountRevision);
-        accountRevision = retry.revision;
-      }
-      else accountRevision = result.revision;
-      accountDirty = false;
+      await flushAccountSync();
+      await syncExistingPushSubscription(refs);
+      if (detailReminderId !== id) return;
+      document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · 已完成`;
+      const pushError = getState().salary.notification.lastError;
+      status.textContent = pushError ? `事项已完成并保存；提醒规则同步失败：${pushError}` : "事项已完成并同步。";
+      button.textContent = pushError ? "重试提醒同步" : "已完成";
+      button.disabled = !pushError;
     } catch (error) {
-      console.warn("Account sync save failed", error);
+      if (detailReminderId !== id) return;
+      status.textContent = `已在本机标记完成，但尚未同步：${error.message}`;
+      button.textContent = "重试同步";
+      button.disabled = false;
+    }
+  });
+}
+
+async function openNotificationReminder(refs) {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  if (!params.has("reminder")) return;
+  const id = params.get("reminder");
+  const version = ++routeVersion;
+  routeLoading = true;
+  const dialog = document.querySelector("#reminderDetail");
+  if (dialog.open) dialog.close();
+  setActiveView(refs, "reminders");
+  refs.reminderBoardState.textContent = "正在加载提醒事项…";
+  try {
+    await flushAccountSync();
+    if (!navigator.onLine) throw new Error("当前离线，无法核对提醒事项。联网后重新点击通知或刷新重试。");
+    const remote = await loadAccountSnapshot();
+    if (version !== routeVersion) return;
+    // Resolve only against the authenticated account, never a stale local cache.
+    if (accountDirty) throw new Error("本机仍有修改正在保存，请稍后重新打开提醒。");
+    accountSyncPaused = true;
+    try {
+      replaceSyncedData(remote.snapshot || { reminders: [] });
+      accountRevision = remote.revision;
     } finally {
       accountSyncPaused = false;
     }
-  }, 800);
+    renderAll(refs);
+    const reminder = remote.snapshot?.reminders?.find((item) => item.id === id);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (!reminder) {
+      refs.reminderBoardState.textContent = "该事项已删除或当前账号无权访问，请在事项列表中查看其他事项。";
+      return;
+    }
+    detailReminderId = id;
+    document.querySelector("#reminderDetailTitle").textContent = reminder.title;
+    document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · ${reminder.completed ? "已完成" : "待处理"}`;
+    document.querySelector("#reminderDetailNotes").textContent = reminder.notes || "暂无备注";
+    document.querySelector("#reminderDetailState").textContent = reminder.completed ? "该事项已完成。" : "";
+    const button = document.querySelector("#reminderDetailComplete");
+    button.disabled = Boolean(reminder.completed);
+    button.textContent = reminder.completed ? "已完成" : "完成事项";
+    refs.reminderBoardState.textContent = "";
+    dialog.showModal();
+  } catch (error) {
+    if (version === routeVersion) refs.reminderBoardState.textContent = `暂时无法打开提醒事项：${error.message}`;
+  } finally {
+    if (version === routeVersion) routeLoading = false;
+  }
 }
 
 async function hydratePushSubscription(refs) {

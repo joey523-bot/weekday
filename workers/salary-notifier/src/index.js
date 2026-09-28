@@ -148,7 +148,7 @@ export async function processSalaryEntry(entry, env, now = new Date()) {
   }
 }
 
-async function processReminderEntry(entry, env) {
+export async function processReminderEntry(entry, env) {
   const now = new Date();
   const local = getLocalParts(now, entry.timezone || FIXED_TIMEZONE);
   if (local.hour !== Number(entry.reminder_hour ?? 9)) {
@@ -169,7 +169,8 @@ async function processReminderEntry(entry, env) {
     title: entry.title,
     body: buildCustomReminderBody(entry, Number(entry.lead_days || 0)),
     tag: `reminder-${entry.reminder_id}-${noticeDate}`,
-    url: env.APP_URL || "/"
+    reminderId: entry.reminder_id,
+    url: `${(env.APP_URL || "/").split("#")[0]}#reminder=${encodeURIComponent(entry.reminder_id)}`
   });
 
   try {

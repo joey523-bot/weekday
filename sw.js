@@ -1,4 +1,4 @@
-const APP_VERSION = "20260928.rem005.1";
+const APP_VERSION = "20260928.entry.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
@@ -77,7 +77,8 @@ self.addEventListener("push", (event) => {
       badge: "./assets/icons/app-icon-star-192.png",
       tag: payload.tag || "salary-reminder",
       data: {
-        url: payload.url || "/"
+        url: payload.url || "/",
+        reminderId: payload.reminderId || ""
       }
     })
   );
@@ -86,24 +87,40 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  event.waitUntil(
-    clients.matchAll({
-      type: "window",
-      includeUncontrolled: true
-    }).then((windowClients) => {
-      const target = windowClients.find((client) => "focus" in client);
-      if (target) {
-        return target.focus();
-      }
-
-      if (clients.openWindow) {
-        return clients.openWindow(event.notification.data?.url || "/");
-      }
-
-      return undefined;
-    })
-  );
+  event.waitUntil(openNotification(event.notification.data));
 });
+
+async function openNotification(data = {}) {
+  // Only navigate inside this application; never trust an external payload URL.
+  const appUrl = new URL(self.registration.scope);
+  let url;
+  try {
+    url = new URL(data.url || appUrl.href, appUrl);
+  } catch {
+    url = new URL(appUrl);
+  }
+  if (url.origin !== appUrl.origin || !url.pathname.startsWith(appUrl.pathname)) {
+    url = new URL(appUrl);
+  }
+  if (data.reminderId) url.hash = new URLSearchParams({ reminder: data.reminderId }).toString();
+  const windows = await clients.matchAll({ type: "window", includeUncontrolled: true });
+  const target = windows.find((client) => client.url.startsWith(appUrl.href) && "navigate" in client);
+  if (target) {
+    try {
+      // Hash navigation keeps a running app (and unsaved form input) alive.
+      const current = new URL(target.url);
+      if (url.hash && current.pathname === url.pathname) {
+        url.search = current.search;
+        url.hash += `&notification=${Date.now()}`;
+      }
+      const navigated = await target.navigate(url.href);
+      if (navigated) return await navigated.focus();
+    } catch {
+      // A closed/discarded window can disappear between matchAll and navigate.
+    }
+  }
+  return clients.openWindow ? clients.openWindow(url.href) : undefined;
+}
 
 function safeParse(value) {
   try {
