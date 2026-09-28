@@ -891,7 +891,6 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
       return;
     }
     detailReminderId = id;
-    document.querySelector("#reminderDetailClose").textContent = activeView === "overview" ? "关闭" : "返回事项列表";
     document.querySelector("#reminderDetailTitle").textContent = reminder.title;
     document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · ${reminder.completed ? "已完成" : "待处理"}`;
     document.querySelector("#reminderDetailNotes").textContent = reminder.notes || "暂无备注";

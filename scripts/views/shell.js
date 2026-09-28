@@ -82,6 +82,7 @@ export function createShell() {
         </section>
 
         <dialog id="reminderDetail" class="reminder-detail" aria-labelledby="reminderDetailTitle">
+          <button id="reminderDetailClose" class="reminder-detail__close" type="button" aria-label="关闭" title="关闭"><span aria-hidden="true">×</span></button>
           <div class="stack-form">
             <h2 id="reminderDetailTitle"></h2>
             <p id="reminderDetailMeta" class="form-note"></p>
@@ -89,7 +90,6 @@ export function createShell() {
             <p id="reminderDetailState" class="form-note" aria-live="polite"></p>
             <button id="reminderDetailComplete" class="button button--primary" type="button">完成事项</button>
             <button id="reminderDetailEdit" class="button button--secondary" type="button">编辑事项</button>
-            <button id="reminderDetailClose" class="button button--secondary" type="button">返回事项列表</button>
           </div>
         </dialog>
 

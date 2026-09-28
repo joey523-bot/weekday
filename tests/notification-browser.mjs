@@ -69,7 +69,13 @@ try {
     await open(page);
     assert.equal(await text(page, '#reminderDetailTitle'), '测试事项一');
     assert.equal(await page.locator('#reminderDetail').evaluate(el => el.scrollWidth <= el.clientWidth), true);
-    await page.screenshot({ path: '/tmp/rem001-detail.png' });
+    const close = page.locator('#reminderDetailClose');
+    assert.equal(await close.getAttribute('aria-label'), '关闭');
+    assert.equal(await close.locator('xpath=..').getAttribute('id'), 'reminderDetail');
+    const box = await close.boundingBox(), dialogBox = await page.locator('#reminderDetail').boundingBox();
+    assert.ok(box.width >= 44 && box.height >= 44);
+    assert.ok(box.y < dialogBox.y + 20 && box.x + box.width > dialogBox.x + dialogBox.width - 20);
+    await page.screenshot({ path: '/tmp/rem001-close-detail.png' });
     await page.click('#reminderDetailComplete');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[0].completed, true);
@@ -158,7 +164,7 @@ try {
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[1].completed, true);
     assert.equal(await page.locator('[data-view="overview"]').isVisible(), true);
-    assert.equal(await text(page, '#reminderDetailClose'), '关闭');
+    assert.equal(await page.locator('#reminderDetailClose').getAttribute('aria-label'), '关闭');
     await page.click('#reminderDetailClose');
     assert.equal(await page.locator('[data-view="overview"]').isVisible(), true);
     await page.setViewportSize({ width: 1280, height: 900 }); // Existing View control is desktop-only.
@@ -178,6 +184,9 @@ try {
     await body.focus(); await body.press('Enter');
     await page.locator('#reminderDetail[open]').waitFor();
     assert.equal(await text(page, '#reminderDetailTitle'), '测试事项二');
+    await page.click('#reminderDetailClose');
+    assert.equal(await page.locator('[data-view="reminders"]').isVisible(), true);
+    await page.locator('#reminderList [data-reminder-detail="r2"] .reminder-item__title').click();
     await page.click('#reminderDetailEdit');
     assert.equal(await page.inputValue('#reminderTitleInput'), '测试事项二');
   });
