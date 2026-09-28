@@ -42,7 +42,7 @@ import {
 } from "./services/account.js";
 import { prepareThemeImage } from "./services/theme.js";
 import { fetchWeatherReportByCoordinates } from "./services/weather.js";
-import { formatDateLong } from "./utils/date.js";
+import { formatDateLong, formatLocalDateInput } from "./utils/date.js";
 import {
   createRefs,
   populateSalaryOptions,
@@ -528,7 +528,9 @@ function resetReminderForm(refs) {
   refs.reminderForm.reset();
   refs.reminderCategoryInput.value = "账单";
   refs.reminderLeadDaysInput.value = "0";
-  refs.reminderHourSelect.value = "9";
+  const now = new Date();
+  refs.reminderDateInput.value = formatLocalDateInput(now);
+  reminderTimeDefault.apply(refs, false, now);
   refs.reminderNotificationInput.checked = true;
   suggestionUI?.refresh();
   refs.reminderFormHeading.textContent = "新建事项";

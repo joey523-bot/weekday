@@ -116,7 +116,7 @@ try {
  });
  await scenario('accept suggestion retains REM005 next-day date and manual time',async(page,api)=>{
    await page.clock.install({time:new Date('2026-12-31T23:00:00+08:00')});
-   await start(page,api,rows); await page.fill('#reminderDateInput','2026-12-31');
+   await start(page,api,rows);
    await page.getByRole('option',{name:'甲',exact:true}).click();
    assert.equal(await page.inputValue('#reminderDateInput'),'2027-01-01');
    assert.equal(await page.inputValue('#reminderHourSelect'),'0');

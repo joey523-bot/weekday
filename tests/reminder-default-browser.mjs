@@ -68,7 +68,7 @@ try {
       await page.clock.install({ time: new Date(time) });
       await page.goto(origin);
       await page.locator('[data-switch-view="compose"]').first().click();
-      await page.fill('#reminderDateInput', time.slice(0,10));
+      // Verify defaults immediately, without touching the date control.
       const late = time.includes('T23:');
       const date = late ? (time.includes('12-31') ? '2027-01-01' : '2026-10-01') : '2026-09-28';
       assert.equal(await page.inputValue('#reminderDateInput'), date);
