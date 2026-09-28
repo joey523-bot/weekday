@@ -1,9 +1,18 @@
+import { normalizeCustomCategories, validateNewCategory } from "./utils/reminder-categories.js";
 import { APP_THEMES, DEFAULT_STATE, DEFAULT_THEME, REMINDER_FILTERS, STORAGE_KEY } from "./config.js";
 
 const state = loadState();
 
 export function getState() {
   return state;
+}
+
+export function addReminderCategory(value) {
+  const name = validateNewCategory(value, state.preferences.customCategories);
+  const previous = state.preferences.customCategories;
+  state.preferences.customCategories = [...previous, name];
+  try { persistState(); } catch (error) { state.preferences.customCategories = previous; throw error; }
+  return name;
 }
 
 export function updateSalary(payload) {
@@ -177,6 +186,7 @@ export function replaceSyncedData(payload) {
     preferences: {
       ...state.preferences,
       ...(payload?.preferences || {}),
+      customCategories: payload?.preferences?.customCategories || [],
       customThemes: state.preferences.customThemes,
       activeCustomThemeId: state.preferences.activeCustomThemeId
     }
@@ -217,6 +227,7 @@ export function getSyncSnapshot() {
     preferences: {
       reminderFilter: state.preferences.reminderFilter,
       nickname: state.preferences.nickname,
+      customCategories: state.preferences.customCategories,
       theme: state.preferences.theme === "custom" ? DEFAULT_THEME : state.preferences.theme
     },
     updatedAt: new Date().toISOString()
@@ -321,6 +332,7 @@ function normalizePreferences(raw, base) {
     theme: requestedTheme === "custom" && !activeCustomThemeId ? DEFAULT_THEME : requestedTheme,
     reminderFilter: normalizeReminderFilter(raw?.reminderFilter),
     nickname: String(raw?.nickname || "").trim().slice(0, 20),
+    customCategories: normalizeCustomCategories(raw?.customCategories),
     customThemes: themes,
     activeCustomThemeId
   };

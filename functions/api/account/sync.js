@@ -1,3 +1,4 @@
+import { preserveMissingCategories } from "../../_utils/category-sync.js";
 import { badRequest, json } from "../../_utils/http.js";
 import { requireSession } from "../../_utils/auth.js";
 
@@ -22,10 +23,17 @@ export async function onRequestPut(context) {
   const revision = Number(body?.baseRevision);
   if (!Number.isInteger(revision) || revision < 1 || !isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
   try {
+    let snapshot = body.snapshot;
+    if (!Object.hasOwn(snapshot.preferences || {}, 'customCategories')) {
+      const stored = await context.env.DB.prepare("SELECT snapshot_data FROM account_sync WHERE user_id = ? AND revision = ?")
+        .bind(result.session.user_id, revision).first();
+      snapshot = preserveMissingCategories(snapshot, stored ? parseSnapshot(stored.snapshot_data) : null);
+      if (!isSnapshot(snapshot)) return badRequest("同步数据无效");
+    }
     const now = new Date().toISOString();
     const write = await context.env.DB.prepare(
       "UPDATE account_sync SET snapshot_data = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND revision = ?"
-    ).bind(JSON.stringify(body.snapshot), now, result.session.user_id, revision).run();
+    ).bind(JSON.stringify(snapshot), now, result.session.user_id, revision).run();
     if (!write.meta.changes) {
       const latest = await context.env.DB.prepare("SELECT snapshot_data, revision, updated_at FROM account_sync WHERE user_id = ?").bind(result.session.user_id).first();
       return json({ ok: false, conflict: true, revision: Number(latest.revision), snapshot: parseSnapshot(latest.snapshot_data), updatedAt: latest.updated_at }, { status: 409 });
