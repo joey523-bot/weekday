@@ -173,25 +173,29 @@ export function renderDashboard(state, refs) {
   }
 }
 
-export function renderSalaryPanel(state, refs) {
-  const nextSalaryDate = getNextSalaryDate(state.salary.day);
-  const daysUntil = getDaysUntil(nextSalaryDate);
-  const reminderDate = new Date(nextSalaryDate);
-  reminderDate.setDate(reminderDate.getDate() - state.salary.notification.leadDays);
+export function renderSalaryPanel(state, refs, reference = new Date()) {
+  const nextSalaryDate = getNextSalaryDate(state.salary.day, reference);
+  const daysUntil = nextSalaryDate ? getDaysUntil(nextSalaryDate, reference) : null;
+  const reminderDate = nextSalaryDate ? new Date(nextSalaryDate) : null;
+  if (reminderDate) reminderDate.setDate(reminderDate.getDate() - state.salary.notification.leadDays);
 
   refs.salaryStatus.textContent = `每月 ${state.salary.day} 日`;
-  refs.salaryDate.textContent = formatDateWithWeekday(nextSalaryDate);
+  refs.salaryDate.textContent = nextSalaryDate ? formatDateWithWeekday(nextSalaryDate) : "工作日日历待更新";
   if (refs.salaryReminderDate) {
-    refs.salaryReminderDate.textContent = formatDateLong(reminderDate);
+    refs.salaryReminderDate.textContent = reminderDate ? formatDateLong(reminderDate) : "待日历更新后确定";
   }
   if (refs.salaryReminderState) {
-    refs.salaryReminderState.textContent = state.salary.notification.enabled ? "已开启" : "未开启";
+    refs.salaryReminderState.textContent = !nextSalaryDate && state.salary.notification.enabled
+      ? "暂停：工作日日历待更新" : state.salary.notification.enabled ? "已开启" : "未开启";
   }
   refs.salaryAmountDisplay.textContent = formatAmount(state.salary.amount);
   refs.salaryAccountDisplay.textContent = formatAccount(state.salary.account);
 
   if (refs.salaryCountdown && refs.salaryCountdownUnit) {
-    if (daysUntil === 0) {
+    if (daysUntil === null) {
+      refs.salaryCountdown.textContent = "--";
+      refs.salaryCountdownUnit.textContent = "待更新";
+    } else if (daysUntil === 0) {
       refs.salaryCountdown.textContent = "0";
       refs.salaryCountdownUnit.textContent = "今天";
     } else if (daysUntil < 0) {

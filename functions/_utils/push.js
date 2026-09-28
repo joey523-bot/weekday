@@ -1,9 +1,11 @@
+import { DEFAULT_SALARY_DAY } from "../../scripts/utils/payday.js";
+
 export function normalizePushPayload(payload) {
   const installationId = String(payload?.installationId || "").trim();
   const endpoint = String(payload?.subscription?.endpoint || payload?.endpoint || "").trim();
   const p256dh = String(payload?.subscription?.keys?.p256dh || "").trim();
   const auth = String(payload?.subscription?.keys?.auth || "").trim();
-  const salaryDay = clampInteger(payload?.salaryDay, 1, 28, 15);
+  const salaryDay = clampInteger(payload?.salaryDay, 1, 28, DEFAULT_SALARY_DAY);
   const leadDays = clampInteger(payload?.leadDays, 0, 7, 0);
   const reminderHour = clampInteger(payload?.reminderHour, 0, 23, 9);
   const permission = String(payload?.permission || "default").trim() || "default";

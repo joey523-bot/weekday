@@ -1,3 +1,6 @@
+import { getNextSalaryParts, getSalaryExecutionParts } from "./payday.js";
+import { CalendarUnavailableError } from "./workday-calendar.js";
+
 const DAY_MS = 86400000;
 
 export function startOfDay(date) {
@@ -46,14 +49,14 @@ export function formatTime(value) {
 }
 
 export function getNextSalaryDate(dayOfMonth, reference = new Date()) {
-  const current = startOfDay(reference);
-  const candidate = getSalaryExecutionDate(reference.getFullYear(), reference.getMonth(), dayOfMonth);
-
-  if (candidate >= current) {
-    return candidate;
+  try {
+    const parts = getNextSalaryParts({ year: reference.getFullYear(), month: reference.getMonth() + 1,
+      day: reference.getDate() }, dayOfMonth);
+    return new Date(parts.year, parts.month - 1, parts.day);
+  } catch (error) {
+    if (error instanceof CalendarUnavailableError) return null;
+    throw error;
   }
-
-  return getSalaryExecutionDate(reference.getFullYear(), reference.getMonth() + 1, dayOfMonth);
 }
 
 export function getDaysUntil(value, reference = new Date()) {
@@ -75,22 +78,20 @@ export function formatCountdown(days) {
 }
 
 export function getSalaryCycleProgress(dayOfMonth, reference = new Date()) {
-  const nextSalaryDate = getNextSalaryDate(dayOfMonth, reference);
-  const daysUntil = getDaysUntil(nextSalaryDate, reference);
-
-  if (daysUntil <= 0) {
-    return 1;
+  try {
+    const local = { year: reference.getFullYear(), month: reference.getMonth() + 1, day: reference.getDate() };
+    const next = getNextSalaryParts(local, dayOfMonth);
+    const nextDate = new Date(next.year, next.month - 1, next.day);
+    const daysUntil = getDaysUntil(nextDate, reference);
+    if (daysUntil === 0) return 1;
+    const last = getSalaryExecutionParts(next.nominalYear, next.nominalMonth - 1, dayOfMonth);
+    const lastDate = new Date(last.year, last.month - 1, last.day);
+    const totalDays = Math.max(1, getDaysUntil(nextDate, lastDate));
+    return Math.min(1, Math.max(0, (totalDays - daysUntil) / totalDays));
+  } catch (error) {
+    if (error instanceof CalendarUnavailableError) return null;
+    throw error;
   }
-
-  const current = startOfDay(reference);
-  let lastSalaryDate = getSalaryExecutionDate(reference.getFullYear(), reference.getMonth(), dayOfMonth);
-
-  if (lastSalaryDate >= current) {
-    lastSalaryDate = getSalaryExecutionDate(reference.getFullYear(), reference.getMonth() - 1, dayOfMonth);
-  }
-
-  const totalDays = Math.max(1, Math.ceil((startOfDay(nextSalaryDate) - lastSalaryDate) / DAY_MS));
-  return Math.min(1, Math.max(0, (totalDays - daysUntil) / totalDays));
 }
 
 export function getReminderTone(days) {
@@ -109,12 +110,17 @@ export function getReminderTone(days) {
   return "planned";
 }
 
-export function buildSalaryAgenda(dayOfMonth, count = 4) {
+export function buildSalaryAgenda(dayOfMonth, count = 4, now = new Date()) {
   const items = [];
-  const now = new Date();
 
   for (let index = 0; index < count; index += 1) {
-    const candidate = getSalaryExecutionDate(now.getFullYear(), now.getMonth() + index, dayOfMonth);
+    let candidate;
+    try {
+      candidate = getSalaryExecutionDate(now.getFullYear(), now.getMonth() + index, dayOfMonth);
+    } catch (error) {
+      if (error instanceof CalendarUnavailableError) break;
+      throw error;
+    }
     items.push({
       id: `salary-${formatLocalDateInput(candidate)}`,
       type: "salary",
@@ -147,20 +153,6 @@ export function buildAgendaItems(reminders, salaryDay, count = 8) {
 }
 
 function getSalaryExecutionDate(year, month, dayOfMonth) {
-  const candidate = startOfDay(new Date(year, month, dayOfMonth));
-  return moveWeekendBackward(candidate);
-}
-
-function moveWeekendBackward(date) {
-  const day = date.getDay();
-
-  if (day === 6) {
-    return startOfDay(new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1));
-  }
-
-  if (day === 0) {
-    return startOfDay(new Date(date.getFullYear(), date.getMonth(), date.getDate() - 2));
-  }
-
-  return date;
+  const parts = getSalaryExecutionParts(year, month + 1, dayOfMonth);
+  return new Date(parts.year, parts.month - 1, parts.day);
 }

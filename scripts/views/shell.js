@@ -8,7 +8,7 @@ export function createShell() {
       <header class="app-header">
         <div class="brand-lockup">
           <button class="brand" data-switch-view="overview" type="button" aria-label="返回星期首页">
-            <span class="brand__mark" aria-hidden="true"><img src="./assets/icons/app-icon-star-192.png?v=20260810.1" alt="" width="38" height="38" /></span>
+            <span class="brand__mark" aria-hidden="true"><img src="./assets/icons/app-icon-star-192.png?v=20260928.1" alt="" width="38" height="38" /></span>
             <span>星期</span>
           </button>
           <p id="todayLabel">--</p>
@@ -291,7 +291,7 @@ export function createAuthShell() {
     <div class="page-noise"></div>
     <main class="auth-screen" aria-labelledby="authTitle">
       <section class="auth-screen__intro">
-        <div class="auth-brand"><span class="auth-brand__mark"><img src="./assets/icons/app-icon-star-192.png?v=20260810.1" alt="" width="42" height="42" /></span><span>星期</span></div>
+        <div class="auth-brand"><span class="auth-brand__mark"><img src="./assets/icons/app-icon-star-192.png?v=20260928.1" alt="" width="42" height="42" /></span><span>星期</span></div>
         <p class="auth-screen__eyebrow">使用前请先登录</p>
         <h1 id="authTitle">先登录，<br /><em>再开启星期。</em></h1>
         <p class="auth-screen__lead">记录发薪日、重要事项和提醒；登录后自动同步到你的其他设备。</p>

@@ -1,6 +1,8 @@
+import { DEFAULT_SALARY_DAY } from "./utils/payday.js";
+
 export const STORAGE_KEY = "yoyuan-ledger:v2";
 export const INSTALLATION_KEY = "yoyuan-ledger:installation-id";
-export const APP_VERSION = "20260810.1";
+export const APP_VERSION = "20260928.1";
 
 export const APP_META = {
   productName: "星期",
@@ -52,7 +54,7 @@ export const REMINDER_FILTERS = {
 
 export const DEFAULT_STATE = {
   salary: {
-    day: 15,
+    day: DEFAULT_SALARY_DAY,
     amount: "",
     account: "",
     notification: {

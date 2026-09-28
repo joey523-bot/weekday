@@ -154,3 +154,7 @@ git push origin main
 ```
 
 推送后，Cloudflare 会自动重新部署。
+
+## 发薪日期维护
+
+发薪日期按中国大陆实际工作日向前回退，日历覆盖范围、年度更新和本地测试见[发薪日历维护记录](docs/payday-calendar.md)。前端与Worker必须同步发布，缺少年份时不推算日期。

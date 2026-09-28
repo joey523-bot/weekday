@@ -1,4 +1,6 @@
 import webpush from "web-push";
+import { getNextSalaryParts, normalizeSalaryDay } from "../../../scripts/utils/payday.js";
+import { CalendarUnavailableError } from "../../../scripts/utils/workday-calendar.js";
 
 const DAY_MS = 86400000;
 const FIXED_TIMEZONE = "Asia/Shanghai";
@@ -60,14 +62,21 @@ export default {
   }
 };
 
-async function processSalaryEntry(entry, env) {
-  const now = new Date();
+export async function processSalaryEntry(entry, env, now = new Date()) {
   const local = getLocalParts(now, entry.timezone || FIXED_TIMEZONE);
   if (local.hour !== Number(entry.reminder_hour ?? 9)) {
     return;
   }
 
-  const targetSalary = getNextSalaryParts(local, Number(entry.salary_day || 15));
+  let targetSalary;
+  try {
+    targetSalary = getNextSalaryParts(local, normalizeSalaryDay(entry.salary_day));
+  } catch (error) {
+    if (!(error instanceof CalendarUnavailableError)) throw error;
+    // Leave last_sent_key unchanged; unrelated custom reminders still run.
+    console.warn(error.message);
+    return;
+  }
   const daysUntil = daysBetween(local, targetSalary);
 
   if (daysUntil !== Number(entry.lead_days || 0)) {
@@ -256,17 +265,6 @@ function getLocalParts(date, timeZone) {
   };
 }
 
-function getNextSalaryParts(local, salaryDay) {
-  const candidate = getSalaryExecutionParts(local.year, local.month, salaryDay);
-
-  if (compareParts(candidate, local) >= 0) {
-    return candidate;
-  }
-
-  const rolled = new Date(Date.UTC(local.year, local.month, 1));
-  return getSalaryExecutionParts(rolled.getUTCFullYear(), rolled.getUTCMonth() + 1, salaryDay);
-}
-
 function daysBetween(start, end) {
   const startUtc = Date.UTC(start.year, start.month - 1, start.day);
   const endUtc = Date.UTC(end.year, end.month - 1, end.day);
@@ -287,42 +285,11 @@ function getReminderNoticeDate(value, leadDays) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
-function getSalaryExecutionParts(year, month, salaryDay) {
-  const candidate = new Date(Date.UTC(year, month - 1, salaryDay));
-  const adjusted = moveWeekendBackward(candidate);
-
-  return {
-    year: adjusted.getUTCFullYear(),
-    month: adjusted.getUTCMonth() + 1,
-    day: adjusted.getUTCDate()
-  };
-}
-
-function moveWeekendBackward(date) {
-  const day = date.getUTCDay();
-
-  if (day === 6) {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - 1));
-  }
-
-  if (day === 0) {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - 2));
-  }
-
-  return date;
-}
-
-function compareParts(left, right) {
-  const leftUtc = Date.UTC(left.year, left.month - 1, left.day);
-  const rightUtc = Date.UTC(right.year, right.month - 1, right.day);
-  return leftUtc - rightUtc;
-}
-
 function buildReminderCopy(daysUntil, targetSalary) {
   if (daysUntil === 0) {
     return {
       title: "今天是发薪日",
-      body: `${targetSalary.month} 月的工资预计今天到账，记得看一眼。`
+      body: `${targetSalary.nominalMonth} 月的工资预计今天到账，记得看一眼。`
     };
   }
 

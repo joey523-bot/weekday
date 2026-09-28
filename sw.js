@@ -1,4 +1,4 @@
-const APP_VERSION = "20260810.1";
+const APP_VERSION = "20260928.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
@@ -22,6 +22,8 @@ const STATIC_ASSETS = [
   "./scripts/services/theme.js",
   "./scripts/services/weather.js",
   "./scripts/utils/date.js",
+  "./scripts/utils/payday.js",
+  "./scripts/utils/workday-calendar.js",
   "./scripts/utils/format.js",
   "./scripts/views/render.js",
   "./scripts/views/shell.js",
