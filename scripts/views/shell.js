@@ -126,8 +126,9 @@ export function createShell() {
                   <span class="date-input-shell">
                     <span id="reminderDateDisplay" class="date-input-shell__value" data-empty="true">选择日期</span>
                     <span class="date-input-shell__icon" aria-hidden="true">${iconCalendar()}</span>
-                    <input id="reminderDateInput" name="date" class="date-input-shell__native" type="date" aria-label="事项日期" required />
+                    <input id="reminderDateInput" name="date" class="date-input-shell__native" type="date" aria-label="事项日期" aria-describedby="reminderDateNotice" required />
                   </span>
+                  <span id="reminderDateNotice" role="status"></span>
                 </label>
                 <label class="field">
                   <span class="field__label">分类</span>

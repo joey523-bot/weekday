@@ -41,6 +41,7 @@ export function createRefs(root) {
     pushSyncState: root.querySelector("#pushSyncState"),
     reminderForm: root.querySelector("#reminderForm"),
     reminderTitleInput: root.querySelector("#reminderTitleInput"),
+    reminderDateNotice: root.querySelector("#reminderDateNotice"),
     reminderDateInput: root.querySelector("#reminderDateInput"),
     reminderDateDisplay: root.querySelector("#reminderDateDisplay"),
     reminderCategoryInput: root.querySelector("#reminderCategoryInput"),

@@ -2,7 +2,7 @@ import { DEFAULT_SALARY_DAY } from "./utils/payday.js";
 
 export const STORAGE_KEY = "yoyuan-ledger:v2";
 export const INSTALLATION_KEY = "yoyuan-ledger:installation-id";
-export const APP_VERSION = "20260928.1";
+export const APP_VERSION = "20260928.rem005.1";
 
 export const APP_META = {
   productName: "星期",

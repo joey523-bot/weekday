@@ -56,6 +56,9 @@ import {
 } from "./views/render.js";
 import { createAuthShell, createShell } from "./views/shell.js";
 
+import { createReminderTimeDefault } from "./utils/reminder-default.js";
+
+const reminderTimeDefault = createReminderTimeDefault();
 let activeView = "overview";
 let editingReminderId = null;
 let accountSyncTimer = null;
@@ -201,8 +204,13 @@ function bindEvents(refs) {
   const root = document.querySelector("#app");
 
   syncReminderDateDisplay(refs);
-  refs.reminderDateInput.addEventListener("input", () => syncReminderDateDisplay(refs));
-  refs.reminderDateInput.addEventListener("change", () => syncReminderDateDisplay(refs));
+  const onReminderDateChange = () => {
+    reminderTimeDefault.apply(refs, editingReminderId !== null);
+    syncReminderDateDisplay(refs);
+  };
+  refs.reminderDateInput.addEventListener("input", onReminderDateChange);
+  refs.reminderDateInput.addEventListener("change", onReminderDateChange);
+  refs.reminderHourSelect.addEventListener("change", () => reminderTimeDefault.markManual());
 
   root?.addEventListener("click", (event) => {
     const themeButton = event.target instanceof Element ? event.target.closest("[data-theme-option]") : null;
@@ -480,6 +488,7 @@ function bindEvents(refs) {
 
 function openReminderEditor(refs, reminder) {
   editingReminderId = reminder.id;
+  refs.reminderDateNotice.textContent = "";
   refs.reminderTitleInput.value = reminder.title;
   refs.reminderDateInput.value = reminder.date;
   refs.reminderCategoryInput.value = reminder.category;
@@ -497,6 +506,8 @@ function openReminderEditor(refs, reminder) {
 
 function resetReminderForm(refs) {
   editingReminderId = null;
+  reminderTimeDefault.reset();
+  refs.reminderDateNotice.textContent = "";
   refs.reminderForm.reset();
   refs.reminderCategoryInput.value = "账单";
   refs.reminderLeadDaysInput.value = "0";
