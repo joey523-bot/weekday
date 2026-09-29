@@ -8,7 +8,7 @@ export function normalizeCycle(value = {}) {
     titles.forEach(title => used.add(title));
     return { id: String(group?.id || titles[0] || ""), titles, disabled: Boolean(group?.disabled) };
   }).filter(group => group.titles.length);
-  return { enabled: value?.enabled !== false, groups, excludedIds: strings(value?.excludedIds),
+  return { enabled: value?.enabled !== false, pushEnabled: value?.pushEnabled === true, groups, excludedIds: strings(value?.excludedIds),
     clearedIds: strings(value?.clearedIds), handledTokens: strings(value?.handledTokens) };
 }
 export function cycleGroups(reminders, raw) {

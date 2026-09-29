@@ -123,7 +123,7 @@ async function startApplication(root) {
   populateSalaryOptions(refs.salaryDaySelect, state.salary.day);
   bindEvents(refs);
   cycleUI = bindCycleUI({ getState, save: updateCyclePreferences, sync: flushAccountSync,
-    ready: () => categoriesReady, compose: suggestion => {
+    ready: () => categoriesReady, enablePush: () => enablePushAndSync(refs), compose: suggestion => {
       resetReminderForm(refs);
       cycleDraft = suggestion;
       refs.reminderTitleInput.value = suggestion.title;
@@ -1015,8 +1015,38 @@ function bindReminderNavigation(refs) {
 
 async function openNotificationReminder(refs) {
   const params = new URLSearchParams(window.location.hash.slice(1));
+  if (params.has("cycle")) return openCycleNotification(refs, params.get("cycle"));
   if (!params.has("reminder")) return;
   return openReminderDetail(refs, params.get("reminder"), { consumeRoute: true });
+}
+
+async function openCycleNotification(refs, id) {
+  const version = ++routeVersion;
+  routeLoading = true;
+  setActiveView(refs, "overview");
+  const feedback = document.querySelector("#cycleFeedback");
+  feedback.hidden = false; feedback.textContent = "正在核对周期建议…";
+  try {
+    await flushAccountSync();
+    if (!navigator.onLine) throw new Error("当前离线，请联网后重新打开通知。");
+    const response = await fetch(`/api/push/cycle?id=${encodeURIComponent(id)}`, {credentials:"same-origin"});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "暂时无法读取建议");
+    const remote = await loadAccountSnapshot();
+    if (version !== routeVersion) return;
+    if (accountDirty) throw new Error("本机修改尚未同步，请稍后重试。");
+    accountSyncPaused = true;
+    try { replaceSyncedData(remote.snapshot || {reminders:[]}); accountRevision = remote.revision; categoriesReady = true; }
+    finally { accountSyncPaused = false; }
+    renderAll(refs);
+    const fresh = cycleSuggestions(getState().reminders,getState().preferences.cycle).find(item => item.id === result.suggestion.id
+      && item.anchorTokens.join() === result.suggestion.anchorTokens.join());
+    if (!fresh || !getState().preferences.cycle.pushEnabled) throw new Error("这条建议已处理或不再满足条件。");
+    history.replaceState(null,"",window.location.pathname+window.location.search);
+    feedback.hidden = true; cycleUI.openSuggestion(fresh);
+  } catch(error) {
+    if (version === routeVersion) feedback.textContent = `暂时无法打开建议：${error.message}`;
+  } finally { if (version === routeVersion) routeLoading = false; }
 }
 
 async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {

@@ -1,3 +1,5 @@
+import { processCycleAccount } from "./cycle.js";
+import { CYCLE_ACCOUNT_SELECT } from "../../../functions/_utils/cycle-push.js";
 import { processSnoozeEntry } from "./snooze.js";
 import webpush from "web-push";
 import { getNextSalaryParts, normalizeSalaryDay } from "../../../scripts/utils/payday.js";
@@ -8,7 +10,7 @@ const FIXED_TIMEZONE = "Asia/Shanghai";
 
 export default {
   async scheduled(controller, env, ctx) {
-    const [salaryRecords, reminderRecords, dailyRecords, snoozes] = await Promise.all([
+    const [salaryRecords, reminderRecords, dailyRecords, snoozes, cycleAccounts] = await Promise.all([
       env.DB.prepare(
       `
         SELECT
@@ -55,10 +57,11 @@ export default {
         WHERE rules.enabled = 1 AND subscriptions.enabled = 1
       `).all(),
       env.DB.prepare(`SELECT * FROM reminder_snoozes WHERE active=1 AND next_at<=?
-        AND (mode='once' OR until_at>?)`).bind(new Date().toISOString(), new Date().toISOString()).all()
+        AND (mode='once' OR until_at>?)`).bind(new Date().toISOString(), new Date().toISOString()).all(),
+      env.DB.prepare(`${CYCLE_ACCOUNT_SELECT} WHERE json_extract(snapshot_data,'$.preferences.cycle.pushEnabled')=1`).all()
     ]);
 
-    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length) {
+    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length && !cycleAccounts?.results?.length) {
       return;
     }
 
@@ -69,7 +72,8 @@ export default {
       ...(salaryRecords.results || []).map((entry) => processSalaryEntry(entry, env)),
       ...(reminderRecords.results || []).map((entry) => processReminderEntry(entry, env)),
       ...(dailyRecords.results || []).map((entry) => processDailyCountdownEntry(entry, env)),
-      ...(snoozes.results || []).map((entry) => processSnoozeEntry(entry, env))
+      ...(snoozes.results || []).map((entry) => processSnoozeEntry(entry, env)),
+      ...(cycleAccounts.results || []).map((entry) => processCycleAccount(entry, env))
     ];
     ctx.waitUntil(Promise.all(jobs));
   }

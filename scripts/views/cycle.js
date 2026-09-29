@@ -2,11 +2,13 @@ import { cycleSuggestions, cycleGroups, normalizeCycle, mergeCycleGroups } from 
 import { escapeHtml as esc } from "../utils/format.js";
 import { formatDateLong } from "../utils/date.js";
 
-export function bindCycleUI({ getState, save, sync, compose, ready }) {
+export function bindCycleUI({ getState, save, sync, compose, ready, enablePush }) {
   const panel = document.querySelector("#cycleSuggestions"), controls = document.querySelector("#cycleControls");
   const enabled = document.querySelector("#cycleEnabled"), status = document.querySelector("#cycleSettingsState");
+  const pushToggle = document.querySelector("#cyclePushEnabled");
   const prefs = () => normalizeCycle(getState().preferences.cycle);
   let current = [], groups = [];
+  let pushBusy = false, pushDesired = false;
   const renderSuggestions = () => {
     current = ready() ? cycleSuggestions(getState().reminders, prefs()) : [];
     panel.hidden = !current.length;
@@ -21,6 +23,7 @@ export function bindCycleUI({ getState, save, sync, compose, ready }) {
   };
   const render = () => {
     renderSuggestions(); enabled.checked = prefs().enabled; enabled.disabled = !ready();
+    pushToggle.checked = pushBusy ? pushDesired : prefs().pushEnabled; pushToggle.disabled = pushBusy || !ready();
     if (!ready()) { controls.innerHTML = '<p>加载账号记录后可管理。</p>'; return; }
     const state = getState(); groups = cycleGroups(state.reminders, prefs());
     const titles = [...new Set(state.reminders.map(item => item.title))].sort();
@@ -45,6 +48,14 @@ export function bindCycleUI({ getState, save, sync, compose, ready }) {
       await sync(); message("周期建议设置已保存。");
     } catch(error) { message(`尚未同步，请联网后重试：${error.message}`); }
   };
+  pushToggle.addEventListener("change", async () => {
+    const turnOn = pushToggle.checked;
+    pushBusy = true; pushDesired = turnOn; pushToggle.disabled = true;
+    try {
+      if (turnOn && !await enablePush()) { render(); status.textContent = "尚未开启周期推送，请先允许当前设备的通知。"; return; }
+      await persist({ ...prefs(), pushEnabled: turnOn });
+    } finally { pushBusy = false; render(); }
+  });
   enabled.addEventListener("change", () => persist({ ...prefs(), enabled: enabled.checked }));
   panel.addEventListener("click", async event => {
     const button = event.target.closest("[data-cycle-action]"); if (!button) return;
@@ -64,7 +75,7 @@ export function bindCycleUI({ getState, save, sync, compose, ready }) {
       catch(error) { status.textContent = error.message; }
     } else if (action === "clear") {
       if (!window.confirm("清除同类分组和学习结果？现有事项会保留，但不再用于周期学习。")) return;
-      await persist({ enabled: p.enabled, clearedIds: [...p.clearedIds,...getState().reminders.map(item=>item.id)] });
+      await persist({ enabled: p.enabled, pushEnabled: p.pushEnabled, clearedIds: [...p.clearedIds,...getState().reminders.map(item=>item.id)] });
     } else {
       const group = groups[Number(button.dataset.index)]; if (!group) return;
       await persist({ ...p, groups: action === "split" ? groups.filter(item=>item.id !== group.id).concat(group.titles.map(title=>({id:`title:${title}`,titles:[title],disabled:group.disabled}))) : groups.map(item=>item.id === group.id ? {...item,disabled:!item.disabled}:item) });
@@ -74,5 +85,5 @@ export function bindCycleUI({ getState, save, sync, compose, ready }) {
     const id = event.target.dataset.cycleExclude; if (!id) return;
     const p=prefs(); persist({...p,excludedIds:event.target.checked ? [...p.excludedIds,id] : p.excludedIds.filter(value=>value!==id)});
   });
-  return { render, renderSuggestions };
+  return { render, renderSuggestions, openSuggestion: compose };
 }

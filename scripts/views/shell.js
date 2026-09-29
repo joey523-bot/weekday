@@ -246,8 +246,10 @@ export function createShell() {
           <section class="settings-grid">
             <article class="journal-card cycle-settings-card">
               <h2 class="section-title">周期建议</h2>
-              <p class="form-note">根据你确认的实际发生日期，在规律稳定时建议下一次。只在首页提示，不自动创建事项或发送通知。</p>
+              <p class="form-note">根据你确认的实际发生日期，在规律稳定时建议下一次。首页保留建议；开启推送后会主动问你是否安排，不自动创建事项。</p>
               <label><input id="cycleEnabled" type="checkbox" /> 开启周期建议</label>
+              <label><input id="cyclePushEnabled" type="checkbox" /> 周期建议推送</label>
+              <p class="form-note">默认关闭。开启后约每5分钟检查，满足条件就尽快推送；每台已开启通知的设备，同一轮最多一次。</p>
               <details id="cycleSettings"><summary>管理同类事项与学习记录</summary>
                 <div id="cycleControls" class="stack-form"></div>
               </details>
