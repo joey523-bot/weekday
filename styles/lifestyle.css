@@ -51,6 +51,6 @@
 #occurrenceDialog form { position:relative; padding-top:26px; }
 #occurrenceCancel { position:absolute; right:-14px; top:-16px; }
 .reminder-time-group { min-width:0; }
-.reminder-time-group h3 { margin:14px 0 8px; font-size:12px; color:var(--text-muted); font-weight:500; }
+.reminder-time-group > h3 { margin:14px 0 8px; font-size:12px; color:var(--text-muted); font-weight:500; }
 .cycle-section-title { margin:6px 0 14px; }
 @media(max-width:360px) { .lifestyle-dialog-body { padding:8px 18px 20px; } .outfit-preview { gap:10px; padding:12px; } .home-topline { gap:5px; } #homeDate,#homeWeather { font-size:12px; } }
