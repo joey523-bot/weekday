@@ -71,7 +71,7 @@ test("reminders can be updated without changing their completion history", async
   const state = await import(`../scripts/state.js?edit=${Date.now()}`);
   state.addReminder({ title: "旧标题", date: "2099-08-10", category: "账单", leadDays: 0, hour: 9, notificationEnabled: true });
   const [reminder] = state.getState().reminders;
-  state.setReminderCompletion(reminder.id, true);
+  state.setReminderCompletion(reminder.id, true, "2026-07-20");
   const completedAt = state.getState().reminders[0].completedAt;
 
   state.updateReminder(reminder.id, { title: "更新后的标题", leadDays: 2, hour: 18, notes: "已修改" });

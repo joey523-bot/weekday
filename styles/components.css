@@ -1966,3 +1966,6 @@ button.weather-peek__content {
 .snooze-options input { min-width: 0; width: 100%; box-sizing: border-box; }
 .reminder-item.reminder-item--due { border: 1px solid #bc7049; background: #fff7ef; }
 .reminder-due-label { color: #954a26; }
+
+#reminderDetailOccurrenceEdit[hidden] { display: none; }
+#occurrenceDate { width: 100%; min-width: 0; box-sizing: border-box; }

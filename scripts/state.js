@@ -1,3 +1,4 @@
+import { isOccurrenceDate } from "./utils/occurrence.js";
 import { normalizeCustomCategories, validateNewCategory } from "./utils/reminder-categories.js";
 import { APP_THEMES, DEFAULT_STATE, DEFAULT_THEME, REMINDER_FILTERS, STORAGE_KEY } from "./config.js";
 
@@ -51,7 +52,8 @@ export function updateReminder(id, payload) {
       id: entry.id,
       createdAt: entry.createdAt,
       completed: entry.completed,
-      completedAt: entry.completedAt
+      completedAt: entry.completedAt,
+      occurredOn: entry.occurredOn
     });
   });
   persistState();
@@ -62,7 +64,8 @@ export function deleteReminder(id) {
   persistState();
 }
 
-export function setReminderCompletion(id, completed) {
+export function setReminderCompletion(id, completed, occurredOn = "") {
+  if (completed && !isOccurrenceDate(occurredOn)) throw new Error("请确认今天或之前的实际发生日期");
   state.reminders = state.reminders.map((entry) => {
     if (entry.id !== id) {
       return entry;
@@ -71,7 +74,8 @@ export function setReminderCompletion(id, completed) {
     return {
       ...entry,
       completed: Boolean(completed),
-      completedAt: completed ? new Date().toISOString() : ""
+      completedAt: completed ? (entry.completed ? entry.completedAt : new Date().toISOString()) : "",
+      occurredOn: completed ? occurredOn : ""
     };
   });
   persistState();
@@ -305,7 +309,8 @@ function normalizeReminder(entry) {
     notes: String(entry?.notes || "").trim(),
     createdAt: entry?.createdAt || new Date().toISOString(),
     completed: Boolean(entry?.completed),
-    completedAt: entry?.completed ? String(entry?.completedAt || entry?.createdAt || "") : ""
+    completedAt: entry?.completed ? String(entry?.completedAt || entry?.createdAt || "") : "",
+    occurredOn: entry?.completed && isOccurrenceDate(entry?.occurredOn) ? entry.occurredOn : ""
   };
 }
 

@@ -1,3 +1,4 @@
+import { requestOccurrenceDate } from "./views/occurrence.js";
 import { bindSnoozePanel } from "./services/snooze.js";
 import { categoryOptions, DEFAULT_CATEGORIES } from "./utils/reminder-categories.js";
 import { APP_META, APP_THEMES, DEFAULT_THEME, REMINDER_FILTERS } from "./config.js";
@@ -558,14 +559,29 @@ function bindEvents(refs) {
       return;
     }
 
+    if (action === "occurrence") {
+      if (await confirmOccurrence(reminder)) {
+        renderAll(refs);
+        try { await flushAccountSync(); refs.reminderBoardState.textContent = "实际发生日期已保存。"; }
+        catch (error) { refs.reminderBoardState.textContent = `日期已保存在本机，尚未同步：${error.message}`; }
+      }
+      return;
+    }
+
     if (action === "complete" || action === "restore") {
       const completed = action === "complete";
-      setReminderCompletion(id, completed);
+      if (completed) { if (!await confirmOccurrence(reminder)) return; }
+      else setReminderCompletion(id, false);
       renderAll(refs);
-      await syncExistingPushSubscription(refs);
-      refs.reminderBoardState.textContent = completed
-        ? "事项已归档到“已完成”，不会再计为逾期或继续推送。"
-        : "事项已恢复到待处理列表。";
+      try {
+        await flushAccountSync();
+        await syncExistingPushSubscription(refs);
+        refs.reminderBoardState.textContent = completed
+          ? "事项已归档到“已完成”，不会再计为逾期或继续推送。"
+          : "事项已恢复到待处理列表。";
+      } catch (error) {
+        refs.reminderBoardState.textContent = `已保存在本机，尚未同步：${error.message}`;
+      }
       return;
     }
 
@@ -883,6 +899,25 @@ async function flushAccountSync() {
   }
 }
 
+async function confirmOccurrence(reminder) {
+  const accountId = activeAccount?.id;
+  const occurredOn = await requestOccurrenceDate(reminder);
+  if (!occurredOn) return false;
+  const current = getState().reminders.find(item => item.id === reminder.id);
+  // Do not apply a stale dialog after a restore, deletion, or account change.
+  if (activeAccount?.id !== accountId || !current || current.completed !== reminder.completed || current.completedAt !== reminder.completedAt) return false;
+  setReminderCompletion(reminder.id, true, occurredOn);
+  return true;
+}
+
+function renderDetailOccurrence(reminder) {
+  document.querySelector("#reminderDetailOccurrence").textContent = reminder.completed
+    ? (reminder.occurredOn ? `实际发生于 ${formatDateLong(reminder.occurredOn)}` : "实际发生日期未确认") : "";
+  const edit = document.querySelector("#reminderDetailOccurrenceEdit");
+  edit.hidden = !reminder.completed;
+  edit.textContent = reminder.occurredOn ? "修改实际发生日期" : "补填实际发生日期";
+}
+
 function bindReminderNavigation(refs) {
   const dialog = document.querySelector("#reminderDetail");
   showSnoozePanel = bindSnoozePanel(dialog, flushAccountSync);
@@ -908,15 +943,24 @@ function bindReminderNavigation(refs) {
     dialog.close();
     if (reminder) openReminderEditor(refs, reminder);
   });
+  document.querySelector("#reminderDetailOccurrenceEdit").addEventListener("click", async () => {
+    const reminder = getState().reminders.find(item => item.id === detailReminderId);
+    if (!reminder || !await confirmOccurrence(reminder)) return;
+    renderAll(refs);
+    renderDetailOccurrence(getState().reminders.find(item => item.id === reminder.id));
+    try { await flushAccountSync(); document.querySelector("#reminderDetailState").textContent = "实际发生日期已保存。"; }
+    catch (error) { document.querySelector("#reminderDetailState").textContent = `日期已保存在本机，尚未同步：${error.message}`; }
+  });
   document.querySelector("#reminderDetailComplete").addEventListener("click", async () => {
     const id = detailReminderId;
     const reminder = getState().reminders.find((item) => item.id === id);
     if (!reminder) return;
     const button = document.querySelector("#reminderDetailComplete");
     const status = document.querySelector("#reminderDetailState");
+    if (!reminder.completed && !await confirmOccurrence(reminder)) return;
     button.disabled = true;
     status.textContent = "正在同步完成状态…";
-    if (!reminder.completed) setReminderCompletion(id, true);
+    renderDetailOccurrence(getState().reminders.find(item => item.id === id));
     renderAll(refs);
     try {
       await flushAccountSync();
@@ -978,6 +1022,7 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
     detailReminderId = id;
     document.querySelector("#reminderDetailTitle").textContent = reminder.title;
     document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · ${reminder.completed ? "已完成" : "待处理"}`;
+    renderDetailOccurrence(reminder);
     document.querySelector("#reminderDetailNotes").textContent = reminder.notes || "暂无备注";
     document.querySelector("#reminderDetailState").textContent = reminder.completed ? "该事项已完成。" : "";
     const button = document.querySelector("#reminderDetailComplete");

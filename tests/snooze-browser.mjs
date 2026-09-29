@@ -104,7 +104,7 @@ try {
   assert.equal(api.rule().mode,'hourly');
   await page.click('#snoozeStop');await page.getByText('尚未设置稍后提醒',{exact:true}).waitFor();assert.equal(api.rule(),null);
   await page.click('[data-snooze="hourly"]');await page.getByText(/每小时提醒 · 下次/).waitFor();
-  await page.click('#reminderDetailComplete');await page.getByText('事项已完成并同步。',{exact:true}).waitFor();
+  await page.click('#reminderDetailComplete'); if (await page.locator('#occurrenceDialog').isVisible()) await page.click('#occurrenceSubmit');await page.getByText('事项已完成并同步。',{exact:true}).waitFor();
   assert.equal(await page.locator('#snoozePanel').isVisible(),false);assert.equal(api.rule(),null);
  });
  await scenario('after 22:00 no prefilled loop cutoff; require explicit future cutoff',async(page,api)=>{

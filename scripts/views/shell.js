@@ -81,11 +81,25 @@ export function createShell() {
           </div>
         </section>
 
+        <dialog id="occurrenceDialog" class="reminder-detail" aria-labelledby="occurrenceHeading">
+          <form class="stack-form">
+            <h2 id="occurrenceHeading">确认实际发生日期</h2>
+            <p id="occurrenceTitle" class="reminder-detail__notes"></p>
+            <label for="occurrenceDate">这件事是哪天做的？</label>
+            <input id="occurrenceDate" class="input" type="date" required autofocus />
+            <p class="form-note">补记时可以选择过去的日期。原计划日期保持不变。</p>
+            <p role="status" class="form-note" aria-live="polite"></p>
+            <button id="occurrenceSubmit" type="submit" class="button button--primary">确认完成</button>
+            <button id="occurrenceCancel" type="button" class="button button--secondary">取消</button>
+          </form>
+        </dialog>
         <dialog id="reminderDetail" class="reminder-detail" aria-labelledby="reminderDetailTitle">
           <button id="reminderDetailClose" class="reminder-detail__close" type="button" aria-label="关闭" title="关闭"><span aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3L13 13M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span></button>
           <div class="stack-form">
             <h2 id="reminderDetailTitle" tabindex="-1" autofocus></h2>
             <p id="reminderDetailMeta" class="form-note"></p>
+            <p id="reminderDetailOccurrence" class="form-note"></p>
+            <button id="reminderDetailOccurrenceEdit" class="button button--link" type="button" hidden>补填实际发生日期</button>
             <p id="reminderDetailNotes" class="reminder-detail__notes"></p>
             <p id="reminderDetailState" class="form-note" aria-live="polite"></p>
             <button id="reminderDetailComplete" class="button button--primary" type="button">完成事项</button>

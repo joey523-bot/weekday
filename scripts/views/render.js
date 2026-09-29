@@ -618,7 +618,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
   const due = isReminderDue(entry);
   const tone = entry.completed ? "completed" : due ? "due" : getReminderTone(days);
   const schedule = entry.completed
-    ? `完成于 ${formatCompletedAt(entry.completedAt)}`
+    ? (entry.occurredOn ? `实际发生于 ${formatDateWithWeekday(entry.occurredOn)}` : "已完成 · 实际发生日期未确认")
     : days < 0
       ? `${formatDateWithWeekday(entry.date)} · 已逾期`
       : days === 0
@@ -647,6 +647,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
         </div>
         <p class="reminder-item__meta">${due ? '<strong class="reminder-due-label">到点未完成 · </strong>' : ""}${escapeHtml(schedule)}</p>
         <p class="reminder-item__notification">${escapeHtml(notification)}</p>
+        ${entry.completed ? `<button class="button button--link" data-action="occurrence" data-id="${escapeHtml(entry.id)}" type="button">${entry.occurredOn ? "修改发生日期" : "补填发生日期"}</button>` : ""}
         ${entry.notes ? `<p class="reminder-item__notes">${escapeHtml(entry.notes)}</p>` : ""}
       </div>
       <div class="reminder-item__side">
@@ -692,19 +693,6 @@ function getEmptyReminderTitle(reminders, filter) {
   if (filter === REMINDER_FILTERS.completed) return "还没有已完成事项";
   if (filter === REMINDER_FILTERS.overdue) return "没有逾期事项";
   return "没有待处理事项";
-}
-
-function formatCompletedAt(value) {
-  if (!value) return "刚刚";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "刚刚";
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date);
 }
 
 function getCompleteIcon() {

@@ -82,7 +82,7 @@ try {
     await page.screenshot({ path: '/tmp/rem001-no-default-focus.png' });
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'reminderDetailComplete');
-    await page.click('#reminderDetailComplete');
+    await page.click('#reminderDetailComplete'); if (await page.locator('#occurrenceDialog').isVisible()) await page.click('#occurrenceSubmit');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[0].completed, true);
     await page.click('#reminderDetailClose');
@@ -128,11 +128,11 @@ try {
   }, { loggedIn: false });
   await scenario('save failure is honest and retry succeeds', async (page, api) => {
     await open(page); api.failSave(true);
-    await page.click('#reminderDetailComplete');
+    await page.click('#reminderDetailComplete'); if (await page.locator('#occurrenceDialog').isVisible()) await page.click('#occurrenceSubmit');
     await page.getByRole('button', { name: '重试同步', exact: true }).waitFor();
     assert.match(await text(page, '#reminderDetailState'), /尚未同步/);
     assert.equal(api.snapshot().reminders[0].completed, false);
-    api.failSave(false); await page.click('#reminderDetailComplete');
+    api.failSave(false); await page.click('#reminderDetailComplete'); if (await page.locator('#occurrenceDialog').isVisible()) await page.click('#occurrenceSubmit');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[0].completed, true);
   });
@@ -144,7 +144,7 @@ try {
   });
   await scenario('revision conflict does not overwrite another device', async (page, api) => {
     await open(page); api.conflict(true);
-    await page.click('#reminderDetailComplete');
+    await page.click('#reminderDetailComplete'); if (await page.locator('#occurrenceDialog').isVisible()) await page.click('#occurrenceSubmit');
     await page.getByText(/其他设备已更新事项/).waitFor();
     assert.equal(api.snapshot().reminders[0].completed, false);
   });
@@ -167,7 +167,7 @@ try {
     await page.locator('#overviewReminderList [data-reminder-detail="r2"] .reminder-item__title').click();
     await page.locator('#reminderDetail[open]').waitFor();
     assert.equal(await text(page, '#reminderDetailTitle'), '测试事项二');
-    await page.click('#reminderDetailComplete');
+    await page.click('#reminderDetailComplete'); if (await page.locator('#occurrenceDialog').isVisible()) await page.click('#occurrenceSubmit');
     await page.getByText('事项已完成并同步。', { exact: true }).waitFor();
     assert.equal(api.snapshot().reminders[1].completed, true);
     assert.equal(await page.locator('[data-view="overview"]').isVisible(), true);
@@ -207,7 +207,7 @@ try {
     await page.locator('[data-tab-button][data-switch-view="reminders"]').click();
     const download = page.waitForEvent('download');
     await page.locator('#reminderList [data-action="export"][data-id="r1"]').click(); await download;
-    await page.locator('#reminderList [data-action="complete"][data-id="r1"]').click();
+    await page.locator('#reminderList [data-action="complete"][data-id="r1"]').click(); await page.click('#occurrenceSubmit');
     await page.click('[data-filter="completed"]');
     await page.locator('#reminderList [data-action="restore"][data-id="r1"]').click();
     await page.click('[data-filter="all"]');
