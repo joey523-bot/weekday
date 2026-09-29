@@ -55,6 +55,8 @@ export function createShell() {
               <button class="button button--secondary button--compact" data-switch-view="settings" type="button">去开启</button>
             </article>
 
+            <section id="cycleSuggestions" aria-label="周期建议" hidden></section>
+            <p id="cycleFeedback" class="form-note" role="status" hidden></p>
             <article class="journal-card reminders-card" id="board">
               <div class="section-head">
                 <div>
@@ -242,6 +244,15 @@ export function createShell() {
           </header>
 
           <section class="settings-grid">
+            <article class="journal-card cycle-settings-card">
+              <h2 class="section-title">周期建议</h2>
+              <p class="form-note">根据你确认的实际发生日期，在规律稳定时建议下一次。只在首页提示，不自动创建事项或发送通知。</p>
+              <label><input id="cycleEnabled" type="checkbox" /> 开启周期建议</label>
+              <details id="cycleSettings"><summary>管理同类事项与学习记录</summary>
+                <div id="cycleControls" class="stack-form"></div>
+              </details>
+              <p id="cycleSettingsState" class="form-note" role="status"></p>
+            </article>
             <article class="journal-card appearance-card" aria-labelledby="appearanceTitle">
               <div class="card-heading">
                 <div>

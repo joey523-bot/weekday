@@ -1,4 +1,4 @@
-const APP_VERSION = "20260929.occurrence.1";
+const APP_VERSION = "20260929.cycle.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
@@ -17,6 +17,8 @@ const STATIC_ASSETS = [
   "./scripts/config.js",
   "./scripts/state.js",
   "./scripts/utils/occurrence.js",
+  "./scripts/utils/cycle.js",
+  "./scripts/views/cycle.js",
   "./scripts/views/occurrence.js",
   "./scripts/services/calendar.js",
   "./scripts/services/account.js",

@@ -1,8 +1,15 @@
+import { normalizeCycle } from "./utils/cycle.js";
 import { isOccurrenceDate } from "./utils/occurrence.js";
 import { normalizeCustomCategories, validateNewCategory } from "./utils/reminder-categories.js";
 import { APP_THEMES, DEFAULT_STATE, DEFAULT_THEME, REMINDER_FILTERS, STORAGE_KEY } from "./config.js";
 
 const state = loadState();
+
+export function updateCyclePreferences(value) {
+  const previous = state.preferences.cycle;
+  state.preferences.cycle = normalizeCycle(value);
+  try { persistState(); } catch(error) { state.preferences.cycle = previous; throw error; }
+}
 
 export function getState() {
   return state;
@@ -28,7 +35,9 @@ export function updateSalary(payload) {
   persistState();
 }
 
-export function addReminder(payload) {
+export function addReminder(payload, cycleTokens = []) {
+  const previousReminders = state.reminders;
+  const previousCycle = state.preferences.cycle;
   state.reminders = [
     ...state.reminders,
     normalizeReminder({
@@ -37,7 +46,9 @@ export function addReminder(payload) {
       createdAt: new Date().toISOString()
     })
   ];
-  persistState();
+  if (cycleTokens.length) state.preferences.cycle = normalizeCycle({ ...previousCycle,
+    handledTokens: [...previousCycle.handledTokens, ...cycleTokens] });
+  try { persistState(); } catch(error) { state.reminders = previousReminders; state.preferences.cycle = previousCycle; throw error; }
 }
 
 export function updateReminder(id, payload) {
@@ -191,6 +202,7 @@ export function replaceSyncedData(payload) {
       ...state.preferences,
       ...(payload?.preferences || {}),
       customCategories: payload?.preferences?.customCategories || [],
+      cycle: payload?.preferences?.cycle || {},
       customThemes: state.preferences.customThemes,
       activeCustomThemeId: state.preferences.activeCustomThemeId
     }
@@ -232,6 +244,7 @@ export function getSyncSnapshot() {
       reminderFilter: state.preferences.reminderFilter,
       nickname: state.preferences.nickname,
       customCategories: state.preferences.customCategories,
+      cycle: state.preferences.cycle,
       theme: state.preferences.theme === "custom" ? DEFAULT_THEME : state.preferences.theme
     },
     updatedAt: new Date().toISOString()
@@ -338,6 +351,7 @@ function normalizePreferences(raw, base) {
     reminderFilter: normalizeReminderFilter(raw?.reminderFilter),
     nickname: String(raw?.nickname || "").trim().slice(0, 20),
     customCategories: normalizeCustomCategories(raw?.customCategories),
+    cycle: normalizeCycle(raw?.cycle),
     customThemes: themes,
     activeCustomThemeId
   };

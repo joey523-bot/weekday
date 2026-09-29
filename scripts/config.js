@@ -72,6 +72,7 @@ export const DEFAULT_STATE = {
   },
   reminders: [],
   preferences: {
+    cycle: { enabled: true, groups: [], excludedIds: [], clearedIds: [], handledTokens: [] },
     city: "",
     nickname: "",
     reminderFilter: REMINDER_FILTERS.all,

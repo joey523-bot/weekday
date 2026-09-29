@@ -1968,3 +1968,18 @@ button.weather-peek__content {
 
 #reminderDetailOccurrenceEdit[hidden] { display: none; }
 #occurrenceDate { width: 100%; min-width: 0; box-sizing: border-box; }
+
+#cycleSuggestions[hidden] { display: none; }
+#cycleSuggestions { display: grid; gap: 14px; }
+.cycle-card { overflow-wrap: anywhere; }
+.cycle-card details { margin-bottom: 12px; }
+.cycle-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cycle-actions .button { min-height: 44px; }
+#cycleSettings > summary { padding: 16px 0; cursor: pointer; }
+#cycleControls select { width: 100%; min-width: 0; }
+.cycle-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.cycle-exclusion { display: block; padding: 10px 0; overflow-wrap: anywhere; }
+
+.cycle-card, .cycle-settings-card { padding: 22px; box-sizing: border-box; }
+.cycle-card p { line-height: 1.6; }
+#cycleFeedback[hidden] { display: none; }

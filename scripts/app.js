@@ -1,9 +1,12 @@
+import { bindCycleUI } from "./views/cycle.js";
+import { cycleSuggestions } from "./utils/cycle.js";
 import { requestOccurrenceDate } from "./views/occurrence.js";
 import { bindSnoozePanel } from "./services/snooze.js";
 import { categoryOptions, DEFAULT_CATEGORIES } from "./utils/reminder-categories.js";
 import { APP_META, APP_THEMES, DEFAULT_THEME, REMINDER_FILTERS } from "./config.js";
 import {
   addReminder,
+  updateCyclePreferences,
   addReminderCategory,
   addCustomTheme,
   deleteReminder,
@@ -72,6 +75,8 @@ let suggestionHistory = [];
 const reminderTimeDefault = createReminderTimeDefault();
 let activeView = "overview";
 let editingReminderId = null;
+let cycleUI = null;
+let cycleDraft = null;
 let accountSyncTimer = null;
 let accountSyncPaused = false;
 let accountRevision = 0;
@@ -117,6 +122,18 @@ async function startApplication(root) {
 
   populateSalaryOptions(refs.salaryDaySelect, state.salary.day);
   bindEvents(refs);
+  cycleUI = bindCycleUI({ getState, save: updateCyclePreferences, sync: flushAccountSync,
+    ready: () => categoriesReady, compose: suggestion => {
+      resetReminderForm(refs);
+      cycleDraft = suggestion;
+      refs.reminderTitleInput.value = suggestion.title;
+      const today = formatLocalDateInput(new Date());
+      refs.reminderDateInput.value = suggestion.expected < today ? today : suggestion.expected;
+      reminderTimeDefault.apply(refs, false);
+      refs.reminderNotificationInput.checked = false;
+      refs.reminderFormDescription.textContent = `周期建议预计${formatDateLong(suggestion.expected)}，请确认日期、时间和是否开启通知。`;
+      syncReminderDateDisplay(refs); setActiveView(refs, "compose");
+    } });
   if (!new URLSearchParams(window.location.hash.slice(1)).has("reminder")) await hydrateAccountData(refs);
   renderAll(refs);
   bindReminderNavigation(refs);
@@ -125,6 +142,7 @@ async function startApplication(root) {
     if (document.visibilityState === 'visible' && activeAccount) {
       renderReminderBoard(getState(), refs);
       renderOverviewReminderPreview(getState(), refs);
+      cycleUI?.renderSuggestions();
     }
   }, 60000);
   await openNotificationReminder(refs);
@@ -426,12 +444,24 @@ function bindEvents(refs) {
     if (isEditing) {
       updateReminder(editingReminderId, payload);
     } else {
-      addReminder(payload);
+      if (cycleDraft) {
+        const fresh = cycleSuggestions(getState().reminders, getState().preferences.cycle).find(item => item.id === cycleDraft.id);
+        if (!fresh || fresh.anchorTokens.join() !== cycleDraft.anchorTokens.join()) {
+          refs.reminderSaveState.textContent = "这条建议已变化或已处理，请返回首页重新查看。"; return;
+        }
+      }
+      try { addReminder(payload, cycleDraft?.tokens || []); }
+      catch(error) { refs.reminderSaveState.textContent = `保存失败：${error.message}`; return; }
     }
 
     resetReminderForm(refs);
     refs.reminderSaveState.textContent = isEditing ? "事项已更新。" : "事项已保存。";
     renderAll(refs);
+    try { await flushAccountSync(); }
+    catch(error) {
+      refs.reminderBoardState.textContent = `已保存在本机，尚未同步：${error.message}`;
+      setActiveView(refs, "reminders"); return;
+    }
 
     if (wantsNotification && !getState().salary.notification.enabled) {
       const enabled = await enablePushAndSync(refs);
@@ -611,6 +641,7 @@ function openReminderEditor(refs, reminder) {
 }
 
 function resetReminderForm(refs) {
+  cycleDraft = null;
   editingReminderId = null;
   reminderTimeDefault.reset();
   refs.reminderDateNotice.textContent = "";
@@ -648,6 +679,7 @@ function renderCategoryOptions(refs, selected = refs.reminderCategoryInput.value
 
 function renderAll(refs) {
   renderCategoryOptions(refs);
+  cycleUI?.render();
   const state = getState();
   applyTheme(state.preferences.theme);
   renderAppearancePanel(state, refs);

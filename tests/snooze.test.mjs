@@ -168,12 +168,13 @@ test('integration: old-client completion retains account custom categories and m
 
 test('old-client account saves retain confirmed occurrence, stay isolated and restore clears sample', async t => {
  const f=fixture(t);
- const stored={preferences:{customCategories:['自定义']},reminders:[{...f.reminder,completed:true,completedAt:'2026-07-29T12:00:00Z',occurredOn:'2026-07-20'}]};
+ const stored={preferences:{customCategories:['自定义'],cycle:{enabled:false,handledTokens:['confirmed-event']}},reminders:[{...f.reminder,completed:true,completedAt:'2026-07-29T12:00:00Z',occurredOn:'2026-07-20'}]};
  f.sqlite.prepare("UPDATE account_sync SET snapshot_data=? WHERE user_id='u'").run(JSON.stringify(stored));
  assert.equal((await f.save(true)).status,200);
  const snapshot=()=>JSON.parse(f.sqlite.prepare("SELECT snapshot_data FROM account_sync WHERE user_id='u'").get().snapshot_data);
  assert.equal(snapshot().reminders[0].occurredOn,'2026-07-20');
  assert.deepEqual(snapshot().preferences.customCategories,['自定义']);
+ assert.deepEqual(snapshot().preferences.cycle,{enabled:false,handledTokens:['confirmed-event']});
  assert.equal(JSON.parse(f.sqlite.prepare("SELECT snapshot_data FROM account_sync WHERE user_id='other'").get().snapshot_data).reminders[0].occurredOn,undefined);
  assert.equal((await f.save(false,1)).status,409);
  assert.equal(snapshot().reminders[0].occurredOn,'2026-07-20');

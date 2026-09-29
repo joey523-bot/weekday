@@ -25,10 +25,12 @@ export async function onRequestPut(context) {
   if (!Number.isInteger(revision) || revision < 1 || !isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
   try {
     let snapshot = body.snapshot;
-    if (!Object.hasOwn(snapshot.preferences || {}, 'customCategories') || snapshot.reminders?.some(item => !Object.hasOwn(item, 'occurredOn'))) {
+    if (!Object.hasOwn(snapshot.preferences || {}, 'cycle') || !Object.hasOwn(snapshot.preferences || {}, 'customCategories') || snapshot.reminders?.some(item => !Object.hasOwn(item, 'occurredOn'))) {
       const stored = await context.env.DB.prepare("SELECT snapshot_data FROM account_sync WHERE user_id = ? AND revision = ?")
         .bind(result.session.user_id, revision).first();
       const previous = stored ? parseSnapshot(stored.snapshot_data) : null;
+      if (!Object.hasOwn(snapshot.preferences || {}, 'cycle')) snapshot = { ...snapshot, preferences: {
+        ...snapshot.preferences, cycle: previous?.preferences?.cycle || {} } };
       snapshot = preserveMissingOccurrences(preserveMissingCategories(snapshot, previous), previous);
       if (!isSnapshot(snapshot)) return badRequest("同步数据无效");
     }
