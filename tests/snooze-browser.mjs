@@ -125,7 +125,7 @@ try {
   await page.clock.install({time:new Date('2026-09-28T12:00:00+08:00')});await page.goto(origin);
   await page.locator('#overviewReminderList .reminder-item--due').waitFor();
   assert.match(await text(page,'#overviewReminderList'),/到点未完成/);
-  assert.equal(await page.locator('#overviewReminderList .reminder-item--due').evaluate(el=>getComputedStyle(el).borderTopColor),'rgb(188, 112, 73)');
+  assert.equal(await page.locator('#overviewReminderList .reminder-item--due').evaluate(el=>getComputedStyle(el).borderTopWidth),'0px');
   await page.screenshot({path:'/tmp/rem002-due-home.png',animations:'disabled'});
   await page.click('[data-tab-button][data-switch-view="reminders"]');
   await page.locator('#reminderList .reminder-item--due').waitFor();

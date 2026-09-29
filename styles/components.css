@@ -1964,7 +1964,6 @@ button.weather-peek__content {
 .snooze-presets { display: flex; gap: 6px; flex-wrap: wrap; }
 .snooze-presets .button { flex: 1; min-height: 44px; padding: 10px 8px; font-size: 14px; }
 .snooze-options input { min-width: 0; width: 100%; box-sizing: border-box; }
-.reminder-item.reminder-item--due { border: 1px solid #bc7049; background: #fff7ef; }
 .reminder-due-label { color: #954a26; }
 
 #reminderDetailOccurrenceEdit[hidden] { display: none; }
