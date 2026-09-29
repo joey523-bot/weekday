@@ -6,6 +6,7 @@ export async function fetchWeatherReportByCoordinates(latitude, longitude) {
     longitude: String(longitude),
     current: [
       "temperature_2m",
+      "uv_index",
       "relative_humidity_2m",
       "apparent_temperature",
       "is_day",
@@ -19,7 +20,7 @@ export async function fetchWeatherReportByCoordinates(latitude, longitude) {
       "wind_direction_10m",
       "wind_gusts_10m"
     ].join(","),
-    hourly: "temperature_2m,weather_code,precipitation_probability",
+    hourly: "temperature_2m,weather_code,precipitation_probability,cloud_cover",
     daily: [
       "weather_code",
       "temperature_2m_max",
@@ -30,7 +31,10 @@ export async function fetchWeatherReportByCoordinates(latitude, longitude) {
       "wind_speed_10m_max",
       "wind_gusts_10m_max",
       "sunrise",
-      "sunset"
+      "sunset",
+      "moonrise",
+      "moonset",
+      "moon_phase"
     ].join(","),
     timezone: "auto",
     forecast_days: "4"
@@ -55,6 +59,8 @@ export async function fetchWeatherReportByCoordinates(latitude, longitude) {
     observedAt: String(current.time || ""),
     source: "Open-Meteo",
     temperature: numberOrNull(current.temperature_2m),
+    uvIndex: numberOrNull(current.uv_index),
+    nightCloudCover: averageNightCloud(weatherData.hourly, String(current.time || "").slice(0,10)),
     apparentTemperature: numberOrNull(current.apparent_temperature),
     humidity: numberOrNull(current.relative_humidity_2m),
     weatherCode,
@@ -164,7 +170,10 @@ function normalizeDailyForecast(daily) {
     windSpeed: numberOrNull(daily.wind_speed_10m_max?.[index]),
     windGusts: numberOrNull(daily.wind_gusts_10m_max?.[index]),
     sunrise: String(daily.sunrise?.[index] || ""),
-    sunset: String(daily.sunset?.[index] || "")
+    sunset: String(daily.sunset?.[index] || ""),
+    moonrise: String(daily.moonrise?.[index] || ""),
+    moonset: String(daily.moonset?.[index] || ""),
+    moonPhase: numberOrNull(daily.moon_phase?.[index])
   }));
 }
 
@@ -243,4 +252,12 @@ async function fetchWithTimeout(url, timeout) {
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+function averageNightCloud(hourly, date) {
+  const values = (hourly?.time || []).flatMap((time, i) => {
+    const v = numberOrNull(hourly.cloud_cover?.[i]);
+    return time.slice(0,10) === date && Number(time.slice(11,13)) >= 18 && v !== null ? [v] : [];
+  });
+  return values.length ? Math.round(values.reduce((a,b)=>a+b,0)/values.length) : null;
 }

@@ -5,6 +5,11 @@ import { formatDateLong } from "../utils/date.js";
 export function bindCycleUI({ getState, save, sync, compose, ready, enablePush }) {
   const panel = document.querySelector("#cycleSuggestions"), controls = document.querySelector("#cycleControls");
   const enabled = document.querySelector("#cycleEnabled"), status = document.querySelector("#cycleSettingsState");
+  const setStatus = text => {
+    status.textContent = text;
+    const pushStatus = document.querySelector('#cyclePushState');
+    if (pushStatus) pushStatus.textContent = text;
+  };
   const pushToggle = document.querySelector("#cyclePushEnabled");
   const prefs = () => normalizeCycle(getState().preferences.cycle);
   let current = [], groups = [];
@@ -12,7 +17,7 @@ export function bindCycleUI({ getState, save, sync, compose, ready, enablePush }
   const renderSuggestions = () => {
     current = ready() ? cycleSuggestions(getState().reminders, prefs()) : [];
     panel.hidden = !current.length;
-    panel.innerHTML = current.map((item,i) => `<article class="journal-card cycle-card">
+    panel.innerHTML = (current.length ? '<h2 class="section-title cycle-section-title">生活小提醒</h2>' : '') + current.map((item,i) => `<article class="journal-card cycle-card">
       <h2 class="section-title">要再安排一次“${esc(item.title)}”吗？</h2>
       <p>依据最近${item.dates.length}个发生日，间隔约${item.median}天，预计${esc(formatDateLong(item.expected))}。</p>
       <details><summary>查看依据</summary><p>实际发生日：${esc(item.dates.join("、"))}</p><p>相邻间隔：${esc(item.gaps.join("、"))}天。日期是估计，你可以调整。</p></details>
@@ -42,7 +47,7 @@ export function bindCycleUI({ getState, save, sync, compose, ready, enablePush }
   };
   const persist = async (value, fromCard = false) => {
     const feedback = document.querySelector("#cycleFeedback");
-    const message = text => { status.textContent = text; if (fromCard) { feedback.hidden = false; feedback.textContent = text; } };
+    const message = text => { setStatus(text); if (fromCard) { feedback.hidden = false; feedback.textContent = text; } };
     try {
       save(value); render(); message("正在保存…");
       await sync(); message("周期建议设置已保存。");
@@ -52,7 +57,7 @@ export function bindCycleUI({ getState, save, sync, compose, ready, enablePush }
     const turnOn = pushToggle.checked;
     pushBusy = true; pushDesired = turnOn; pushToggle.disabled = true;
     try {
-      if (turnOn && !await enablePush()) { render(); status.textContent = "尚未开启周期推送，请先允许当前设备的通知。"; return; }
+      if (turnOn && !await enablePush()) { render(); setStatus("尚未开启周期推送，请先允许当前设备的通知。"); return; }
       await persist({ ...prefs(), pushEnabled: turnOn });
     } finally { pushBusy = false; render(); }
   });
@@ -72,7 +77,7 @@ export function bindCycleUI({ getState, save, sync, compose, ready, enablePush }
     const action = button.dataset.cycleSetting, p = prefs();
     if (action === "merge") {
       try { await persist(mergeCycleGroups(getState().reminders, p, document.querySelector("#cycleFirst").value, document.querySelector("#cycleSecond").value)); }
-      catch(error) { status.textContent = error.message; }
+      catch(error) { setStatus(error.message); }
     } else if (action === "clear") {
       if (!window.confirm("清除同类分组和学习结果？现有事项会保留，但不再用于周期学习。")) return;
       await persist({ enabled: p.enabled, pushEnabled: p.pushEnabled, clearedIds: [...p.clearedIds,...getState().reminders.map(item=>item.id)] });

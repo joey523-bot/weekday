@@ -1,3 +1,4 @@
+import { setupLifestyle, renderLifestyle } from "./views/lifestyle.js";
 import { bindCycleUI } from "./views/cycle.js";
 import { cycleSuggestions } from "./utils/cycle.js";
 import { requestOccurrenceDate } from "./views/occurrence.js";
@@ -116,6 +117,7 @@ async function startApplication(root) {
   suggestionUI = null;
   applyTheme(getState().preferences.theme);
   root.innerHTML = createShell();
+  setupLifestyle(root);
 
   const refs = createRefs(document);
   const state = getState();
@@ -143,6 +145,7 @@ async function startApplication(root) {
       renderReminderBoard(getState(), refs);
       renderOverviewReminderPreview(getState(), refs);
       cycleUI?.renderSuggestions();
+      renderLifestyle(getState());
     }
   }, 60000);
   await openNotificationReminder(refs);
@@ -690,6 +693,7 @@ function renderAll(refs) {
   renderReminderBoard(state, refs);
   renderOverviewReminderPreview(state, refs);
   renderAccountPanel(refs);
+  renderLifestyle(state);
   syncViewState(refs);
 }
 

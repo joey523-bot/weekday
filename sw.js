@@ -1,10 +1,16 @@
-const APP_VERSION = "20260929.cyclepush.1";
+const APP_VERSION = "20260929.layout.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./styles/main.css",
+  "./styles/lifestyle.css",
+  "./scripts/utils/lifestyle.js",
+  "./scripts/views/lifestyle.js",
+  "./assets/outfits/light.svg",
+  "./assets/outfits/layer.svg",
+  "./assets/outfits/warm.svg",
   "./styles/tokens.css",
   "./styles/base.css",
   "./styles/layout.css",

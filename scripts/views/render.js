@@ -1,3 +1,5 @@
+import { isWeatherFresh } from "../utils/lifestyle.js";
+import { renderMoon, renderOutfit } from "./lifestyle.js";
 import { isReminderDue } from "../utils/snooze.js";
 import { APP_THEMES, REMINDER_FILTERS, WEATHER_CODES } from "../config.js";
 import {
@@ -399,6 +401,7 @@ function renderWeatherSlot(state, slot) {
 }
 
 function renderWeatherDetail(state, slot, payload) {
+  const fresh = isWeatherFresh(payload);
   const condition = WEATHER_CODES[payload.weatherCode] || "天气更新";
   const city = payload.city || "当前位置";
   const today = payload.dailyForecast?.[0] || {};
@@ -416,7 +419,7 @@ function renderWeatherDetail(state, slot, payload) {
       <section class="weather-hero" aria-labelledby="weatherCondition">
         <div class="weather-hero__topline">
           <span class="weather-hero__location">${getLocationIconSvg()}${escapeHtml(city)}</span>
-          <span class="weather-hero__live">实况</span>
+          <span class="weather-hero__live">${fresh ? "实况" : "待更新"}</span>
         </div>
         <div class="weather-hero__main">
           <span class="weather-hero__icon" aria-hidden="true">${getWeatherIconSvg(payload.weatherCode, payload.isDay)}</span>
@@ -434,6 +437,8 @@ function renderWeatherDetail(state, slot, payload) {
         </div>
       </section>
 
+      ${fresh ? renderOutfit(payload) : '<p class="form-note">天气数据已过期或时间未知，请刷新后查看当前UV和穿衣建议。</p>'}
+      <section class="weather-section"><h2>追月亮</h2>${renderMoon(payload)}</section>
       <section class="weather-section" aria-labelledby="weatherAdviceTitle">
         <div class="weather-section__heading">
           <div><span>出门前</span><h2 id="weatherAdviceTitle">生活建议</h2></div>
@@ -456,7 +461,8 @@ function renderWeatherDetail(state, slot, payload) {
           ${renderWeatherMetric("降水概率", formatMetric(rainProbability, "%"), "umbrella")}
           ${renderWeatherMetric("相对湿度", formatMetric(payload.humidity, "%"), "humidity")}
           ${renderWeatherMetric("风速风向", wind, "wind")}
-          ${renderWeatherMetric("紫外线", formatUvIndex(today.uvIndex), "sun")}
+          ${renderWeatherMetric("当前UV", formatUvIndex(fresh ? payload.uvIndex : null), "sun")}
+          ${renderWeatherMetric("今日最高UV", formatUvIndex(today.uvIndex), "sun")}
         </div>
       </section>
 
@@ -510,10 +516,10 @@ function formatUvIndex(value) {
   if (value === null || value === undefined || value === "") return "—";
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  if (number >= 8) return `${Math.round(number)} · 很强`;
-  if (number >= 6) return `${Math.round(number)} · 较强`;
-  if (number >= 3) return `${Math.round(number)} · 中等`;
-  return `${Math.round(number)} · 较弱`;
+  if (number >= 8) return `${number.toFixed(1)} · 很强`;
+  if (number >= 6) return `${number.toFixed(1)} · 较强`;
+  if (number >= 3) return `${number.toFixed(1)} · 中等`;
+  return `${number.toFixed(1)} · 较弱`;
 }
 
 function formatWindDirection(degrees) {
@@ -600,7 +606,15 @@ export function renderReminderBoard(state, refs) {
     return;
   }
 
-  refs.reminderList.innerHTML = filtered.map((entry) => renderReminderItem(entry)).join("");
+  const groups = new Map();
+  for (const entry of filtered) {
+    const days = getDaysUntil(entry.date);
+    const label = days < 0 ? '过去' : days === 0 ? '今天' : days === 1 ? '明天' : '之后';
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(entry);
+  }
+  refs.reminderList.innerHTML = [...groups].map(([label, entries]) =>
+    `<section class="reminder-time-group"><h3>${label}</h3>${entries.map(renderReminderItem).join("")}</section>`).join("");
 }
 
 export function renderOverviewReminderPreview(state, refs) {
