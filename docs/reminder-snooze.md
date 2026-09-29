@@ -1,4 +1,4 @@
-# REM-002 稍后提醒（本地候选）
+# REM-002 稍后提醒
 
 ## 行为
 
@@ -27,6 +27,6 @@ node --test tests/*.test.mjs
 WEEKDAY_PLAYWRIGHT_PATH=/path/to/playwright WEEKDAY_BROWSER_EXECUTABLE=/path/to/chrome node tests/snooze-browser.mjs
 ```
 
-本轮只开发验证，未运行生产迁移。发布前必须核对当时正式基线并集成并行分类候选，重新验证受影响交集。获得发布授权后，先执行追加迁移`cloudflare/migrations/0005-reminder-snoozes.sql`，再发布Pages与Worker；否则新版账号同步会因缺表失败。迁移无数据改写、不自动创建循环；可重复执行。发布失败时回滚Pages/Worker到发布前版本并保留新表，不删除业务数据。若回滚后用户继续完成事项，应在再次启用REM-002前核对并停用已完成/删除事项的残留计划。
+发布前必须核对当时正式基线并保留已发布分类功能，重新验证受影响交集。获得发布授权后，先执行追加迁移`cloudflare/migrations/0005-reminder-snoozes.sql`，再发布Pages与Worker；否则新版账号同步会因缺表失败。迁移无数据改写、不自动创建循环；可重复执行。发布失败时回滚Pages/Worker到发布前版本并保留新表，不删除业务数据。若回滚后用户继续完成事项，应在再次启用REM-002前核对并停用已完成/删除事项的残留计划。
 
 真机稍后通知送达、跨设备完成/停止、系统静音表现须发布后验收；本地SQLite/Chrome和构建不替代生产D1或iPhone验收。

@@ -1,3 +1,4 @@
+import { preserveMissingCategories } from "../../_utils/category-sync.js";
 import { badRequest, json } from "../../_utils/http.js";
 import { requireSession } from "../../_utils/auth.js";
 
@@ -22,10 +23,17 @@ export async function onRequestPut(context) {
   const revision = Number(body?.baseRevision);
   if (!Number.isInteger(revision) || revision < 1 || !isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
   try {
+    let snapshot = body.snapshot;
+    if (!Object.hasOwn(snapshot.preferences || {}, 'customCategories')) {
+      const stored = await context.env.DB.prepare("SELECT snapshot_data FROM account_sync WHERE user_id = ? AND revision = ?")
+        .bind(result.session.user_id, revision).first();
+      snapshot = preserveMissingCategories(snapshot, stored ? parseSnapshot(stored.snapshot_data) : null);
+      if (!isSnapshot(snapshot)) return badRequest("同步数据无效");
+    }
     const now = new Date().toISOString();
     const writes = await context.env.DB.batch([context.env.DB.prepare(
       "UPDATE account_sync SET snapshot_data = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND revision = ?"
-    ).bind(JSON.stringify(body.snapshot), now, result.session.user_id, revision),
+    ).bind(JSON.stringify(snapshot), now, result.session.user_id, revision),
       context.env.DB.prepare(`UPDATE reminder_snoozes SET active = 0, updated_at = ?
         WHERE user_id = ? AND active = 1 AND NOT EXISTS (
           SELECT 1 FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r

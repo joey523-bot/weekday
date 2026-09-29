@@ -155,3 +155,13 @@ test('scheduled worker dispatches snooze and existing ordinary reminder independ
  await worker.scheduled({},f.env,{waitUntil(p){pending=p;}});await pending;
  assert.equal(f.sent.length,2);assert.ok(f.sent.some(p=>p.tag.startsWith('snooze-')));assert.ok(f.sent.some(p=>p.tag==='reminder-r-2026-09-28'));
 });
+test('integration: old-client completion retains account custom categories and migrated item labels',async t=>{
+ const f=fixture(t);t.mock.timers.enable({apis:['Date'],now:base});
+ const stored={preferences:{customCategories:['旅行']},reminders:[{...f.reminder,category:'带东西'}]};
+ f.sqlite.prepare('UPDATE account_sync SET snapshot_data=? WHERE user_id=?').run(JSON.stringify(stored),'u');
+ await f.post({mode:'hourly',until:'2026-09-28T22:00'});
+ const response=await onRequestPut({env:f.env,request:f.request({baseRevision:1,snapshot:{reminders:[{...stored.reminders[0],completed:true}]}})});
+ assert.equal(response.status,200);assert.equal(f.rule().active,0);
+ const saved=JSON.parse(f.sqlite.prepare("SELECT snapshot_data FROM account_sync WHERE user_id='u'").get().snapshot_data);
+ assert.deepEqual(saved.preferences.customCategories,['旅行']);assert.equal(saved.reminders[0].category,'带东西');
+});

@@ -167,12 +167,18 @@ export function createShell() {
                 <label class="field">
                   <span class="field__label">分类</span>
                   <select id="reminderCategoryInput" name="category" class="select">
-                    <option value="账单">账单</option><option value="会员">会员</option>
-                    <option value="证件">证件</option><option value="合同">合同</option>
-                    <option value="家庭">家庭</option><option value="其他">其他</option>
+                    <option value="带东西">带东西</option><option value="买东西">买东西</option>
+                    <option value="售后">售后</option><option value="其他">其他</option>
                   </select>
                 </label>
               </div>
+              <button id="addCategoryButton" class="button button--ghost" type="button" aria-expanded="false" aria-controls="newCategoryPanel">新增分类</button>
+              <div id="newCategoryPanel" hidden>
+                <label class="field"><span class="field__label">新分类名称</span><input id="newCategoryInput" class="input" placeholder="例如：运动" /></label>
+                <button id="saveCategoryButton" class="button" type="button">保存分类</button>
+                <button id="cancelCategoryButton" class="button button--ghost" type="button">取消</button>
+              </div>
+              <p id="categoryState" role="status"></p>
               <fieldset class="reminder-timing">
                 <legend>提醒安排</legend>
                 <label class="reminder-switch">

@@ -1,7 +1,9 @@
 import { bindSnoozePanel } from "./services/snooze.js";
+import { categoryOptions, DEFAULT_CATEGORIES } from "./utils/reminder-categories.js";
 import { APP_META, APP_THEMES, DEFAULT_THEME, REMINDER_FILTERS } from "./config.js";
 import {
   addReminder,
+  addReminderCategory,
   addCustomTheme,
   deleteReminder,
   deleteCustomTheme,
@@ -63,6 +65,7 @@ import { bindReminderSuggestions } from "./utils/reminder-suggestions.js";
 
 let dueRefreshTimer;
 let showSnoozePanel;
+let categoriesReady = false;
 let suggestionUI;
 let suggestionHistory = [];
 const reminderTimeDefault = createReminderTimeDefault();
@@ -102,6 +105,7 @@ async function boot() {
 }
 
 async function startApplication(root) {
+  categoriesReady = false;
   suggestionHistory = [];
   suggestionUI = null;
   applyTheme(getState().preferences.theme);
@@ -236,6 +240,37 @@ function bindAuthEvents(root) {
 function bindEvents(refs) {
   const root = document.querySelector("#app");
 
+  const panel = root.querySelector('#newCategoryPanel');
+  const categoryName = root.querySelector('#newCategoryInput');
+  const categoryMessage = root.querySelector('#categoryState');
+  const toggle = root.querySelector('#addCategoryButton');
+  const closeCategoryPanel = () => { panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
+  toggle.addEventListener('click', () => {
+    panel.hidden = false; toggle.setAttribute('aria-expanded', 'true'); categoryMessage.textContent = ''; categoryName.focus();
+  });
+  root.querySelector('#cancelCategoryButton').addEventListener('click', closeCategoryPanel);
+  const saveCategory = async () => {
+    const button = root.querySelector('#saveCategoryButton');
+    if (button.disabled) return;
+    if (!categoriesReady) { categoryMessage.textContent = '分类尚未从账号加载，请联网刷新后再试。'; return; }
+    button.disabled = true;
+    let added = false;
+    try {
+      const name = addReminderCategory(categoryName.value);
+      added = true;
+      renderCategoryOptions(refs, name);
+      categoryName.value = ''; closeCategoryPanel();
+      categoryMessage.textContent = '分类已保存，正在同步…';
+      await flushAccountSync();
+      categoryMessage.textContent = '分类已保存并同步。';
+    } catch (error) {
+      categoryMessage.textContent = added ? `分类已保存在本机，但尚未同步：${error.message}` : error.message;
+    } finally { button.disabled = false; }
+  };
+  root.querySelector('#saveCategoryButton').addEventListener('click', saveCategory);
+  categoryName.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); saveCategory(); }
+  });
   suggestionUI = bindReminderSuggestions(refs.reminderTitleInput, root.querySelector("#reminderSuggestions"), () => suggestionHistory);
   syncReminderDateDisplay(refs);
   const onReminderDateChange = () => {
@@ -545,7 +580,7 @@ function openReminderEditor(refs, reminder) {
   refs.reminderDateNotice.textContent = "";
   refs.reminderTitleInput.value = reminder.title;
   refs.reminderDateInput.value = reminder.date;
-  refs.reminderCategoryInput.value = reminder.category;
+  renderCategoryOptions(refs, reminder.category, reminder.category);
   refs.reminderLeadDaysInput.value = String(reminder.leadDays);
   refs.reminderHourSelect.value = String(reminder.hour);
   refs.reminderNotificationInput.checked = reminder.notificationEnabled;
@@ -564,7 +599,10 @@ function resetReminderForm(refs) {
   reminderTimeDefault.reset();
   refs.reminderDateNotice.textContent = "";
   refs.reminderForm.reset();
-  refs.reminderCategoryInput.value = "账单";
+  renderCategoryOptions(refs, DEFAULT_CATEGORIES[0]);
+  document.querySelector("#newCategoryPanel").hidden = true;
+  document.querySelector("#addCategoryButton").setAttribute("aria-expanded", "false");
+  document.querySelector("#categoryState").textContent = "";
   refs.reminderLeadDaysInput.value = "0";
   const now = new Date();
   refs.reminderDateInput.value = formatLocalDateInput(now);
@@ -583,7 +621,17 @@ function syncReminderDateDisplay(refs) {
   refs.reminderDateDisplay.dataset.empty = String(!value);
 }
 
+function renderCategoryOptions(refs, selected = refs.reminderCategoryInput.value, legacy = '') {
+  const oldCategory = legacy || (editingReminderId ? getState().reminders.find(item => item.id === editingReminderId)?.category : '');
+  const values = categoryOptions(categoriesReady ? getState().preferences.customCategories : [], oldCategory);
+  refs.reminderCategoryInput.replaceChildren(...values.map(value => {
+    const option = document.createElement('option'); option.value = value; option.textContent = value; return option;
+  }));
+  refs.reminderCategoryInput.value = values.includes(selected) ? selected : DEFAULT_CATEGORIES[0];
+}
+
 function renderAll(refs) {
+  renderCategoryOptions(refs);
   const state = getState();
   applyTheme(state.preferences.theme);
   renderAppearancePanel(state, refs);
@@ -788,6 +836,7 @@ async function hydrateAccountData(refs, { preserveLocal = false } = {}) {
     if (preserveLocal && (accountDirty || routeLoading || detailReminderId || remote.revision === accountRevision)) return;
     accountSyncPaused = true;
     replaceSyncedData(remote.snapshot);
+    categoriesReady = true;
     suggestionHistory = getState().reminders;
     suggestionUI?.refresh();
     accountRevision = remote.revision;
@@ -911,6 +960,7 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
     accountSyncPaused = true;
     try {
       replaceSyncedData(remote.snapshot || { reminders: [] });
+      categoriesReady = true;
       suggestionHistory = getState().reminders;
       suggestionUI?.refresh();
       accountRevision = remote.revision;

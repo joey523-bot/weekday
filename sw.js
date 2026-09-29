@@ -1,4 +1,4 @@
-const APP_VERSION = "20260928.snooze.1";
+const APP_VERSION = "20260929.snooze.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
@@ -25,6 +25,7 @@ const STATIC_ASSETS = [
   "./scripts/services/weather.js",
   "./scripts/utils/date.js",
   "./scripts/utils/reminder-default.js",
+  "./scripts/utils/reminder-categories.js",
   "./scripts/utils/reminder-suggestions.js",
   "./scripts/utils/payday.js",
   "./scripts/utils/workday-calendar.js",

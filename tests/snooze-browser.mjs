@@ -131,5 +131,24 @@ try {
   await page.locator('#reminderList .reminder-item--due').waitFor();
   assert.equal(await page.locator('#reminderList .reminder-item').count(),2);
  });
+ await scenario('new record defaults, save and reopen snooze and category survive together',async(page,api)=>{
+  await page.clock.install({time:new Date('2026-09-28T12:00:00+08:00')});await page.goto(origin);
+  await page.locator('[data-switch-view="compose"]').first().click();
+  assert.equal(await page.inputValue('#reminderCategoryInput'),'带东西');
+  assert.equal(await page.inputValue('#reminderHourSelect'),'13');
+  await page.fill('#reminderTitleInput','新建补提醒验收');
+  const saved=page.waitForResponse(r=>r.url().endsWith('/api/account/sync')&&r.request().method()==='PUT');
+  await page.click('#reminderSubmitButton');await saved;
+  const item=api.snapshot().reminders.find(r=>r.title==='新建补提醒验收');
+  assert.equal(item.category,'带东西');assert.equal(item.hour,13);
+  await page.goto(`${origin}/#reminder=${item.id}`);await page.locator('#reminderDetail[open]').waitFor();
+  await page.getByText('尚未设置稍后提醒',{exact:true}).waitFor();await page.locator('#snoozePanel summary').click();
+  assert.equal(await page.inputValue('#snoozeUntil'),'2026-09-28T22:00');
+  await page.click('[data-snooze="hourly"]');await page.getByText(/每小时提醒 · 下次/).waitFor();
+  await page.click('#reminderDetailClose');await page.goto(`${origin}/#reminder=${item.id}`);
+  await page.getByText(/每小时提醒 · 下次/).waitFor();
+  assert.equal(api.snapshot().reminders.find(r=>r.id===item.id).date,item.date);
+  await page.click('#reminderDetailEdit');assert.equal(await page.inputValue('#reminderCategoryInput'),'带东西');assert.equal(await page.inputValue('#reminderHourSelect'),'13');
+ });
  console.log(`${count} snooze browser scenarios passed; fixtures only.`);
 } finally {await browser?.close();server.close();}
