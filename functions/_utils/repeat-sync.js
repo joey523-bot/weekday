@@ -7,7 +7,9 @@ export function hasRepeatItems(snapshot) {
 // Old clients normalize away unknown fields, so omission cannot be interpreted as
 // a deliberate conversion, completion or deletion of a recurring series.
 export function validateRepeatSnapshot(incoming, stored) {
-  if ((hasRepeatItems(incoming) || hasRepeatItems(stored)) && incoming?.capabilities?.repeat !== 1) {
+  const requiresV2 = [incoming,stored].some(snapshot => snapshot?.reminders?.some(item => item?.repeat?.version === 2));
+  const capability = incoming?.capabilities?.repeat;
+  if ((hasRepeatItems(incoming) || hasRepeatItems(stored)) && (!Number.isInteger(capability) || capability < (requiresV2 ? 2 : 1))) {
     const error = new Error("当前应用版本不支持循环事项，请刷新应用后再同步。");
     error.status = 426;
     throw error;

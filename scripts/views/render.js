@@ -1,5 +1,5 @@
 import { repeatSummary, beijingDate } from "../utils/repeat.js";
-import { repeatStatusLabel } from "./repeat.js";
+import { repeatStatusLabel, displayReminder, nextReminderLabel } from "./repeat.js";
 import { isWeatherFresh } from "../utils/lifestyle.js";
 import { renderMoon, renderOutfit } from "./lifestyle.js";
 import { isReminderDue } from "../utils/snooze.js";
@@ -169,7 +169,7 @@ export function renderDashboard(state, refs) {
   }
 
   if (refs.reminderSummaryValue && refs.reminderSummaryMeta) {
-    const pending = state.reminders.filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active"));
+    const pending = state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})).filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active"));
     const upcoming = pending.filter((entry) => reminderDaysUntil(entry) >= 0);
     refs.reminderSummaryValue.textContent = String(pending.length);
     refs.reminderSummaryMeta.textContent = pending.length
@@ -577,7 +577,7 @@ function getAdviceIconSvg(kind) {
 }
 
 export function renderReminderBoard(state, refs) {
-  const sorted = getSortedReminders(state.reminders);
+  const sorted = getSortedReminders(state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})));
   const filtered = applyFilter(sorted, state.preferences.reminderFilter);
 
   refs.reminderCount.textContent = `${filtered.length} 条`;
@@ -621,7 +621,7 @@ export function renderReminderBoard(state, refs) {
 }
 
 export function renderOverviewReminderPreview(state, refs) {
-  const pending = getSortedReminders(state.reminders.filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active")));
+  const pending = getSortedReminders(state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})).filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active")));
   const preview = pending.slice(0, 3);
   refs.overviewReminderCount.textContent = `${pending.length} 条`;
   refs.overviewReminderCount.hidden = pending.length === 0;
@@ -644,12 +644,12 @@ function renderReminderItem(entry, { preview = false } = {}) {
       : days === 0
         ? `${formatDateWithWeekday(entry.date)} · 今天`
         : formatDateWithWeekday(entry.date);
-  const notification = inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
+  const notification = entry.nextReminderAt ? `${nextReminderLabel(entry.nextReminderAt)}${entry.notificationEnabled ? '' : ' · 仅记录，不推送'}` : inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
     ? "已完成，不再推送"
     : entry.notificationEnabled
       ? `推送 ${entry.leadDays ? `提前 ${entry.leadDays} 天 · ` : "当天 · "}${entry.repeat ? `${entry.repeat.time} 北京时间` : formatHour(entry.hour)}`
       : "仅记录，不推送";
-  const completionAction = entry.repeat && (entry.completed || inactive) ? "" : entry.completed
+  const completionAction = entry.repeat && (entry.completed || inactive || entry.recordedOutcome) ? "" : entry.completed
     ? `<button class="reminder-complete-button is-completed" data-action="restore" data-id="${escapeHtml(entry.id)}" type="button" aria-label="恢复事项 ${escapeHtml(entry.title)}">${getRestoreIcon()}</button>`
     : `<button class="reminder-complete-button" data-action="complete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="标记事项 ${escapeHtml(entry.title)} 为已完成">${getCompleteIcon()}</button>`;
   const deleteAction = `<button class="reminder-delete-button" data-action="delete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="删除事项 ${escapeHtml(entry.title)}">${getDeleteIcon()}</button>`;
@@ -658,7 +658,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
     : `${historical ? "" : `<button class="button button--link" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">编辑</button>`}<button class="button button--link" data-action="export" data-id="${escapeHtml(entry.id)}" type="button">导出</button>`;
 
   return `
-    <article class="reminder-item reminder-item--${tone}" data-reminder-detail="${escapeHtml(entry.id)}">
+    <article class="reminder-item reminder-item--${tone}" data-reminder-detail="${escapeHtml(entry.id)}" data-occurrence="${escapeHtml(entry.repeat?.scheduledDate || '')}">
       <div class="reminder-item__icon" aria-hidden="true">${getCategoryIcon(entry.category)}</div>
       <div class="reminder-item__body" role="button" tabindex="0" aria-label="查看事项 ${escapeHtml(entry.title)}">
         <div class="reminder-item__title-row">
@@ -668,7 +668,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
         </div>
         <p class="reminder-item__meta">${due ? '<strong class="reminder-due-label">到点未完成 · </strong>' : ""}${escapeHtml(schedule)}</p>
         <p class="reminder-item__notification">${escapeHtml(notification)}</p>
-        ${entry.repeat ? `<p class="reminder-item__repeat">${escapeHtml(repeatSummary(entry.repeat))}</p>` : ""}
+        ${entry.repeat ? `<p class="reminder-item__repeat">${escapeHtml(repeatSummary(entry.repeat))}${entry.recordedOutcome ? " · 本次已记录" : ""}</p>` : ""}
         ${entry.completed && !entry.repeat ? `<button class="button button--link" data-action="occurrence" data-id="${escapeHtml(entry.id)}" type="button">${entry.occurredOn ? "修改发生日期" : "补填发生日期"}</button>` : ""}
         ${entry.notes ? `<p class="reminder-item__notes">${escapeHtml(entry.notes)}</p>` : ""}
       </div>
@@ -686,7 +686,8 @@ function formatHour(hour) {
 }
 
 export function reminderDaysUntil(entry, now = new Date()) {
-  return entry.repeat ? Math.round((Date.parse(`${entry.date}T00:00:00Z`) - Date.parse(`${beijingDate(now)}T00:00:00Z`)) / 86400000) : getDaysUntil(entry.date, now);
+  const date = !entry.completed && entry.nextReminderAt ? beijingDate(new Date(entry.nextReminderAt)) : entry.date;
+  return entry.repeat ? Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${beijingDate(now)}T00:00:00Z`)) / 86400000) : getDaysUntil(entry.date, now);
 }
 function reminderMinutes(entry) {
   if (!entry.repeat) return Number(entry.hour) * 60;
@@ -703,7 +704,7 @@ function getSortedReminders(reminders) {
       return String(right.completedAt || "").localeCompare(String(left.completedAt || ""));
     }
     const dueOrder = Number(isReminderDue(right)) - Number(isReminderDue(left));
-    return dueOrder || left.date.localeCompare(right.date) || reminderMinutes(left) - reminderMinutes(right);
+    return dueOrder || (left.nextReminderAt && right.nextReminderAt ? left.nextReminderAt.localeCompare(right.nextReminderAt) : left.date.localeCompare(right.date)) || reminderMinutes(left) - reminderMinutes(right);
   });
 }
 

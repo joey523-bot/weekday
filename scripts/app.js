@@ -1,4 +1,4 @@
-import { bindRepeatSettings, repeatStatusLabel } from "./views/repeat.js";
+import { bindRepeatSettings, repeatStatusLabel, displayReminder, nextReminderLabel } from "./views/repeat.js";
 import { repeatSummary } from "./utils/repeat.js";
 import { setupLifestyle, renderLifestyle } from "./views/lifestyle.js";
 import { bindCycleUI } from "./views/cycle.js";
@@ -80,6 +80,7 @@ const reminderTimeDefault = createReminderTimeDefault();
 let activeView = "overview";
 let editingReminderId = null;
 let editingRepeatScope = "once";
+let editingOccurrenceDate = "";
 let repeatUI = null;
 let cycleUI = null;
 let cycleDraft = null;
@@ -92,6 +93,10 @@ let accountSavePromise = null;
 let accountChangeVersion = 0;
 let routeVersion = 0;
 let detailReminderId = null;
+let detailOccurrenceDate = "";
+let detailPinnedOccurrence = false;
+let detailActionBusy = false;
+let detailSnoozeKey = "";
 let routeLoading = false;
 const CUSTOM_THEME_VARIABLES = [
   "--bg", "--surface", "--surface-strong", "--surface-muted", "--text", "--text-muted", "--text-soft",
@@ -144,15 +149,26 @@ async function startApplication(root) {
   if (!new URLSearchParams(window.location.hash.slice(1)).has("reminder")) await hydrateAccountData(refs);
   renderAll(refs);
   bindReminderNavigation(refs);
-  clearInterval(dueRefreshTimer);
-  dueRefreshTimer = setInterval(() => {
-    if (document.visibilityState === 'visible' && activeAccount) {
-      renderReminderBoard(getState(), refs);
-      renderOverviewReminderPreview(getState(), refs);
-      cycleUI?.renderSuggestions();
-      renderLifestyle(getState());
+  clearTimeout(dueRefreshTimer);
+  const refreshClockViews = () => {
+    if (document.visibilityState !== 'visible' || !activeAccount) return;
+    renderDashboard(getState(), refs);
+    renderReminderBoard(getState(), refs);
+    renderOverviewReminderPreview(getState(), refs);
+    cycleUI?.renderSuggestions();
+    renderLifestyle(getState());
+    const isEditingDetail = document.querySelector('#occurrenceDialog')?.open || document.querySelector('#repeatScopeDialog')?.open
+      || document.querySelector('#snoozePanel details')?.open;
+    if (detailReminderId && !detailActionBusy && !routeLoading && !isEditingDetail) {
+      const reminder = getState().reminders.find(item => item.id === detailReminderId);
+      if (reminder) renderReminderDetailContents(reminder);
     }
-  }, 60000);
+  };
+  const scheduleClockRefresh = () => {
+    clearTimeout(dueRefreshTimer);
+    dueRefreshTimer = setTimeout(() => { refreshClockViews(); scheduleClockRefresh(); }, 60000 - Date.now() % 60000 + 25);
+  };
+  scheduleClockRefresh();
   await openNotificationReminder(refs);
   registerServiceWorker();
   hydratePushSubscription(refs);
@@ -172,7 +188,9 @@ async function startApplication(root) {
     scheduleAccountSync(refs);
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || routeLoading || detailReminderId) return;
+    if (document.visibilityState !== "visible") return;
+    refreshClockViews(); scheduleClockRefresh();
+    if (routeLoading || detailReminderId) return;
     if (accountDirty) {
       scheduleAccountSync(refs);
       return;
@@ -455,7 +473,7 @@ function bindEvents(refs) {
     const isEditing = Boolean(editingReminderId);
 
     if (isEditing) {
-      try { updateReminder(editingReminderId, payload, editingRepeatScope); }
+      try { updateReminder(editingReminderId, payload, editingRepeatScope, {occurrenceDate: editingOccurrenceDate}); }
       catch(error) { refs.reminderSaveState.textContent = `保存失败：${error.message}`; return; }
     } else {
       if (cycleDraft) {
@@ -582,7 +600,9 @@ function bindEvents(refs) {
       return;
     }
 
-    const reminder = getState().reminders.find((entry) => entry.id === id);
+    const rawReminder = getState().reminders.find((entry) => entry.id === id);
+    const occurrenceDate = actionButton.closest('[data-reminder-detail]')?.dataset.occurrence || '';
+    const reminder = action === 'delete' ? rawReminder : rawReminder ? displayReminder(rawReminder, {occurrenceDate, reminders:getState().reminders, resolveHistory:action !== 'edit'}) : null;
     if (!reminder) {
       return;
     }
@@ -637,11 +657,13 @@ function bindEvents(refs) {
 }
 
 async function openReminderEditor(refs, reminder) {
+  const frozenOccurrence = reminder.repeat?.scheduledDate || '';
   if (reminder.repeat && ['history','ended'].includes(reminder.repeat.status)) return;
   const scope = reminder.repeat ? await repeatUI.chooseScope() : 'once';
   if (!scope) return;
   if (!getState().reminders.some(item => item.id === reminder.id)) return;
   editingRepeatScope = scope;
+  editingOccurrenceDate = frozenOccurrence;
   editingReminderId = reminder.id;
   refs.reminderDateNotice.textContent = "";
   refs.reminderTitleInput.value = reminder.title;
@@ -665,6 +687,7 @@ function resetReminderForm(refs) {
   cycleDraft = null;
   editingReminderId = null;
   editingRepeatScope = "once";
+  editingOccurrenceDate = "";
   repeatUI?.set(null);
   reminderTimeDefault.reset();
   refs.reminderDateNotice.textContent = "";
@@ -958,14 +981,23 @@ async function flushAccountSync() {
 async function confirmOccurrence(reminder) {
   if (reminder.repeat && reminder.repeat.status !== 'active') return false;
   const accountId = activeAccount?.id;
-  const occurredOn = await requestOccurrenceDate(reminder);
+  const requestedDate = requestOccurrenceDate(reminder);
+  if (reminder.repeat) document.querySelector('#occurrenceTitle').textContent = `${reminder.title} · 本次事项日期 ${formatDateLong(reminder.date)} ${reminder.repeat.time}（北京时间）`;
+  const occurredOn = await requestedDate;
   if (!occurredOn) return false;
   const current = getState().reminders.find(item => item.id === reminder.id);
   // Do not apply a stale dialog after a restore, deletion, or account change.
   if (activeAccount?.id !== accountId || !current || current.completed !== reminder.completed || current.completedAt !== reminder.completedAt) return false;
-  if (current.repeat && current.repeat.status !== 'active') return false;
-  setReminderCompletion(reminder.id, true, occurredOn);
-  return true;
+  if (current.repeat && !(current.repeat.status === 'active' || current.repeat.mode === 'fixed' && current.repeat.status === 'calendar_wait')) return false;
+  try {
+    if (reminder.repeat) manageRepeat(reminder.id, 'complete', {occurredOn, occurrenceDate:reminder.repeat.scheduledDate});
+    else setReminderCompletion(reminder.id, true, occurredOn);
+    return true;
+  } catch(error) {
+    document.querySelector('#reminderDetailState').textContent = error.message;
+    document.querySelector('#reminderBoardState').textContent = error.message;
+    return false;
+  }
 }
 
 function renderDetailOccurrence(reminder) {
@@ -994,10 +1026,11 @@ function bindReminderNavigation(refs) {
     if (card) openReminderDetail(refs, card.dataset.reminderDetail);
   });
   window.addEventListener("hashchange", () => openNotificationReminder(refs));
-  dialog.addEventListener("close", () => { if (!dialog.open) detailReminderId = null; });
+  dialog.addEventListener("close", () => { if (!dialog.open) { detailReminderId = null; detailOccurrenceDate = ""; detailPinnedOccurrence = false; detailSnoozeKey = ""; } });
   document.querySelector("#reminderDetailClose").addEventListener("click", () => dialog.close());
   document.querySelector("#reminderDetailEdit").addEventListener("click", async () => {
-    const reminder = getState().reminders.find((item) => item.id === detailReminderId);
+    const raw = getState().reminders.find((item) => item.id === detailReminderId);
+    const reminder = raw ? displayReminder(raw, {occurrenceDate:detailOccurrenceDate, reminders:getState().reminders, resolveHistory:detailPinnedOccurrence}) : null;
     dialog.close();
     if (reminder) await openReminderEditor(refs, reminder);
   });
@@ -1011,45 +1044,48 @@ function bindReminderNavigation(refs) {
   });
   document.querySelector("#reminderDetailComplete").addEventListener("click", async () => {
     const id = detailReminderId;
-    const reminder = getState().reminders.find(item => item.id === id);
-    if (!reminder) return;
+    const raw = getState().reminders.find(item => item.id === id);
+    if (!raw || detailActionBusy) return;
+    const frozenDate = detailOccurrenceDate;
+    const reminder = displayReminder(raw, {occurrenceDate:frozenDate, reminders:getState().reminders});
     const button = document.querySelector("#reminderDetailComplete");
     const status = document.querySelector("#reminderDetailState");
+    detailActionBusy = true;
     try {
       if (!reminder.completed && !await confirmOccurrence(reminder)) return;
+      detailPinnedOccurrence = Boolean(reminder.repeat?.mode === 'fixed');
+      detailOccurrenceDate = frozenDate;
       button.disabled = true;
       status.textContent = "正在同步完成状态…";
       renderAll(refs);
-      const current = getState().reminders.find(item => item.id === id);
-      renderReminderDetailContents(current);
+      renderReminderDetailContents(getState().reminders.find(item => item.id === id));
       await flushAccountSync();
       await syncExistingPushSubscription(refs);
       if (detailReminderId !== id) return;
       const pushError = getState().salary.notification.lastError;
       status.textContent = pushError ? `本次已保存；提醒规则同步失败：${pushError}` : reminder.repeat
-        ? "本次已完成并同步。下一期按循环规则安排，可在待处理列表查看。" : "事项已完成并同步。";
-      if (pushError) {
-        button.textContent = "重试提醒同步"; button.disabled = false;
-      }
+        ? reminder.repeat.mode === 'fixed' ? '本次已完成并同步。固定周期继续按计划提醒，完成记录不会改变后续安排。' : '本次已完成并同步。下一期按完成后的间隔安排。'
+        : "事项已完成并同步。";
+      if (pushError) { button.textContent = "重试提醒同步"; button.disabled = false; }
     } catch(error) {
       if (detailReminderId !== id) return;
-      status.textContent = `已保存在本机，尚未同步：${error.message}`;
+      status.textContent = `本次操作尚未同步：${error.message}`;
       button.textContent = "重试同步"; button.disabled = false;
-    } finally {
-      if (detailReminderId === id && !getState().reminders.find(item => item.id === id)?.completed) button.disabled = false;
-    }
+    } finally { detailActionBusy = false; }
   });
   document.querySelector("#repeatManagement").addEventListener("click", async event => {
     const button = event.target.closest('[data-repeat-action]');
     const reminder = getState().reminders.find(item => item.id === detailReminderId);
-    if (!button || button.disabled || !reminder?.repeat) return;
+    if (!button || button.disabled || !reminder?.repeat || detailActionBusy) return;
     const action = button.dataset.repeatAction, id = reminder.id;
     if (action === 'end' && !window.confirm('结束这个循环？将停止后续安排，已完成和跳过的历史保留。结束后不能恢复。')) return;
     if (action === 'skip' && !window.confirm(reminder.repeat.mode === 'after' ? '跳过本次？从今天重新计算间隔，不记作完成。' : '跳过本次并接续未来计划？本次不记作完成。')) return;
     const status = document.querySelector('#reminderDetailState');
-    button.disabled = true;
+    const frozenDate = detailOccurrenceDate;
+    detailActionBusy = true; button.disabled = true;
     try {
-      if (action !== 'sync') manageRepeat(id, action);
+      if (action !== 'sync') manageRepeat(id, action, {occurrenceDate:frozenDate});
+      if (reminder.repeat.mode === 'fixed') { detailPinnedOccurrence = action !== 'resume'; detailOccurrenceDate = frozenDate; }
       renderAll(refs);
       renderReminderDetailContents(getState().reminders.find(item => item.id === id));
       status.textContent = '正在同步循环状态…';
@@ -1061,7 +1097,7 @@ function bindReminderNavigation(refs) {
     } catch(error) {
       status.textContent = `操作未同步：${error.message}`;
       document.querySelector('[data-repeat-action="sync"]').hidden = false;
-    } finally { button.disabled = false; }
+    } finally { detailActionBusy = false; button.disabled = false; }
   });
 }
 
@@ -1069,7 +1105,7 @@ async function openNotificationReminder(refs) {
   const params = new URLSearchParams(window.location.hash.slice(1));
   if (params.has("cycle")) return openCycleNotification(refs, params.get("cycle"));
   if (!params.has("reminder")) return;
-  return openReminderDetail(refs, params.get("reminder"), { consumeRoute: true });
+  return openReminderDetail(refs, params.get("reminder"), { consumeRoute: true, occurrenceDate:params.get("occurrence") || "" });
 }
 
 async function openCycleNotification(refs, id) {
@@ -1101,7 +1137,7 @@ async function openCycleNotification(refs, id) {
   } finally { if (version === routeVersion) routeLoading = false; }
 }
 
-async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
+async function openReminderDetail(refs, id, { consumeRoute = false, occurrenceDate = "" } = {}) {
   const version = ++routeVersion;
   routeLoading = true;
   const dialog = document.querySelector("#reminderDetail");
@@ -1134,6 +1170,9 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
       return;
     }
     detailReminderId = id;
+    detailOccurrenceDate = occurrenceDate;
+    detailPinnedOccurrence = Boolean(occurrenceDate);
+    detailSnoozeKey = "";
     renderReminderDetailContents(reminder);
     document.querySelector("#reminderDetailState").textContent = '';
     refs.reminderBoardState.textContent = "";
@@ -1148,8 +1187,10 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
   }
 }
 
-function renderReminderDetailContents(reminder) {
-  if (!reminder) return;
+function renderReminderDetailContents(rawReminder) {
+  if (!rawReminder) return;
+  const reminder = displayReminder(rawReminder, {occurrenceDate:detailPinnedOccurrence ? detailOccurrenceDate : '', reminders:getState().reminders});
+  detailOccurrenceDate = reminder.repeat?.scheduledDate || '';
   const rule = reminder.repeat;
   const inactive = rule && rule.status !== 'active';
   const historical = rule && ['history','ended'].includes(rule.status);
@@ -1158,11 +1199,15 @@ function renderReminderDetailContents(reminder) {
   const summary = document.querySelector('#reminderDetailRepeat');
   summary.hidden = !rule;
   summary.textContent = rule ? `↻ 循环 · ${repeatSummary(rule)} · ${rule.time} 北京时间${rule.endDate ? ` · 至${rule.endDate}` : ''}` : '';
+  const next = document.querySelector('#reminderDetailNext');
+  next.hidden = !reminder.nextReminderAt;
+  next.textContent = nextReminderLabel(reminder.nextReminderAt);
   renderDetailOccurrence(reminder);
+  if (reminder.recordedOutcome) document.querySelector('#reminderDetailOccurrence').textContent = '本次已记录完成，提醒仍按原计划进行。';
   document.querySelector('#reminderDetailNotes').textContent = reminder.notes || '暂无备注';
   const complete = document.querySelector('#reminderDetailComplete');
-  complete.disabled = Boolean(reminder.completed || inactive);
-  complete.textContent = reminder.completed ? repeatStatusLabel(reminder) || '已完成' : rule ? '完成本次' : '完成事项';
+  complete.disabled = Boolean(reminder.completed || inactive || reminder.recordedOutcome);
+  complete.textContent = reminder.recordedOutcome ? '本次已记录' : reminder.completed ? repeatStatusLabel(reminder) || '已完成' : rule ? '完成本次' : '完成事项';
   document.querySelector('#reminderDetailEdit').hidden = Boolean(historical);
   document.querySelector('#repeatManagement').hidden = !rule;
   document.querySelector('[data-repeat-action="skip"]').hidden = !rule || inactive;
@@ -1175,8 +1220,13 @@ function renderReminderDetailContents(reminder) {
       ? '这是历史期次，不能恢复或重新开启循环。后续计划请在待处理列表查看。' : rule.status === 'ended'
         ? '循环已结束，历史记录保留。需要继续时请新建事项。' : rule.status === 'paused'
           ? `暂停期间不推送、不补发。恢复后${rule.mode === 'after' ? '保留本次未完成项。' : '接续下一次未来计划。'}`
-          : '完成或跳过后接续下一期。循环按北京时间安排，同步后生效；到点可能延迟几分钟送达。';
-  showSnoozePanel(inactive ? { ...reminder, completed:true } : reminder);
+          : rule.mode === 'fixed' ? '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次提醒是计划时间，不代表已发送；推送可能延迟几分钟。'
+            : '完成或跳过后接续下一期。循环按北京时间安排，同步后生效；到点可能延迟几分钟送达。';
+  const snoozeKey = `${reminder.id}:${detailOccurrenceDate}:${rule?.status || ''}:${reminder.completed}:${reminder.recordedOutcome || ''}`;
+  if (snoozeKey !== detailSnoozeKey) {
+    detailSnoozeKey = snoozeKey;
+    showSnoozePanel(inactive || reminder.recordedOutcome ? { ...reminder, completed:true } : reminder);
+  }
 }
 
 async function hydratePushSubscription(refs) {

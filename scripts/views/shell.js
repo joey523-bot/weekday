@@ -103,6 +103,7 @@ export function createShell() {
             <h2 id="reminderDetailTitle" tabindex="-1" autofocus></h2>
             <p id="reminderDetailMeta" class="form-note"></p>
             <p id="reminderDetailRepeat" class="form-note" hidden></p>
+            <p id="reminderDetailNext" class="form-note" hidden></p>
             <p id="reminderDetailOccurrence" class="form-note"></p>
             <button id="reminderDetailOccurrenceEdit" class="button button--link" type="button" hidden>补填实际发生日期</button>
             <p id="reminderDetailNotes" class="reminder-detail__notes"></p>
@@ -113,7 +114,7 @@ export function createShell() {
               <button type="button" class="button button--secondary" data-repeat-action="skip">跳过本次</button>
               <button type="button" class="button button--secondary" data-repeat-action="pause">暂停循环</button>
               <button type="button" class="button button--secondary" data-repeat-action="resume" hidden>恢复循环</button>
-              <button type="button" class="button button--link" data-repeat-action="end">结束循环</button>
+              <button type="button" class="button button--secondary" data-repeat-action="end">结束循环</button>
               <button type="button" class="button button--secondary" data-repeat-action="sync" hidden>重试同步</button>
             </section>
             <button id="reminderDetailEdit" class="button button--secondary" type="button">编辑事项</button>

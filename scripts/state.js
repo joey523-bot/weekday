@@ -1,5 +1,5 @@
 import { normalizeCycle } from "./utils/cycle.js";
-import { normalizeRepeat, firstRepeatDate, nextRepeatDate, beijingDate, validRepeatDate } from "./utils/repeat.js";
+import { normalizeRepeat, firstRepeatDate, nextRepeatDate, nextFixedOccurrence, fixedOccurrenceForDate, beijingDate, validRepeatDate } from "./utils/repeat.js";
 import { isOccurrenceDate } from "./utils/occurrence.js";
 import { normalizeCustomCategories, validateNewCategory } from "./utils/reminder-categories.js";
 import { APP_THEMES, DEFAULT_STATE, DEFAULT_THEME, REMINDER_FILTERS, STORAGE_KEY } from "./config.js";
@@ -36,17 +36,17 @@ export function updateSalary(payload) {
   persistState();
 }
 
-export function addReminder(payload, cycleTokens = []) {
+export function addReminder(payload, cycleTokens = [], { now = new Date() } = {}) {
   const previousReminders = state.reminders;
   const previousCycle = state.preferences.cycle;
   const reminder = prepareNewReminder({
     ...payload,
     id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
     completed: false,
     completedAt: "",
     occurredOn: ""
-  });
+  }, now);
   state.reminders = [...state.reminders, reminder];
   if (cycleTokens.length) state.preferences.cycle = normalizeCycle({ ...previousCycle,
     handledTokens: [...previousCycle.handledTokens, ...cycleTokens] });
@@ -54,17 +54,29 @@ export function addReminder(payload, cycleTokens = []) {
   return reminder;
 }
 
-export function updateReminder(id, payload, scope = "once") {
+export function updateReminder(id, payload, scope = "once", { occurrenceDate = "", now = new Date() } = {}) {
   if (!["once", "series"].includes(scope)) throw new Error("请选择仅本次或整个系列");
   const current = state.reminders.find(entry => entry.id === id);
   if (!current) return;
   if (current.repeat?.status === "history") throw new Error("循环历史不能修改，请编辑当前事项");
   const hasRepeat = Object.hasOwn(payload, "repeat");
   const requestedRule = hasRepeat ? normalizeRepeat(payload.repeat) : current.repeat;
-  const apply = entry => {
+  if (current.repeat?.mode === "fixed" && (scope === "once" || requestedRule?.mode === "fixed")) {
+    const updated = updateFixedReminder(current, payload, requestedRule, scope, occurrenceDate, now);
+    commitReminders(state.reminders.map(entry => entry.id === id ? updated : entry));
+    return updated;
+  }
+  const apply = savedEntry => {
+    let entry = savedEntry;
+    if (entry.repeat?.mode === "fixed") {
+      const active = { ...entry, repeat: { ...entry.repeat, status: "active" } };
+      const projected = occurrenceDate ? fixedOccurrenceForDate(active, occurrenceDate) : nextFixedOccurrence(active, now).occurrence;
+      if (!projected && occurrenceDate) throw new Error("该期次已失效，请刷新后重试");
+      if (projected) entry = { ...projected, repeat: { ...projected.repeat, status: savedEntry.repeat.status } };
+    }
     const merged = { ...entry, ...payload, id: entry.id, createdAt: entry.createdAt,
       completed: entry.completed, completedAt: entry.completedAt, occurredOn: entry.occurredOn };
-    if (!entry.repeat) return requestedRule ? prepareNewReminder({ ...merged, repeat: requestedRule }) : normalizeReminder(merged);
+    if (!entry.repeat) return requestedRule ? prepareNewReminder({ ...merged, repeat: requestedRule }, now) : normalizeReminder(merged);
     if (scope === "once") {
       // A local date/time exception must never alter the series anchor or future template.
       const time = requestedRule?.time || entry.repeat.time;
@@ -75,6 +87,16 @@ export function updateReminder(id, payload, scope = "once") {
       seriesId: entry.repeat.seriesId, status: entry.repeat.status });
     const template = reminderTemplate({ ...merged, repeat: rule });
     rule.template = template;
+    if (rule.mode === "fixed") {
+      rule.version = 2;
+      rule.overrides = {};
+      rule.skippedDates = [];
+      rule.resumeAfter = now.toISOString();
+    } else if (entry.repeat.mode === "fixed") {
+      rule.overrides = {};
+      rule.skippedDates = [];
+      rule.resumeAfter = "";
+    }
     // Content-only changes preserve an explicit exception on the current item.
     const scheduleChanged = ["freq", "mode", "interval", "unit", "workday", "startDate", "endDate"]
       .some(key => rule[key] !== entry.repeat[key])
@@ -122,7 +144,7 @@ export function setReminderCompletion(id, completed, occurredOn = "") {
   }));
 }
 
-export function manageRepeat(id, action, { occurredOn = "", now = new Date() } = {}) {
+export function manageRepeat(id, action, { occurrenceDate = "", occurredOn = "", now = new Date() } = {}) {
   const entry = state.reminders.find(item => item.id === id);
   if (!entry?.repeat) throw new Error("该事项没有循环设置");
   if (entry.repeat.status === "history" || entry.completed) throw new Error("循环历史不能修改，请管理当前事项");
@@ -130,6 +152,7 @@ export function manageRepeat(id, action, { occurredOn = "", now = new Date() } =
   const today = beijingDate(now);
   const rule = normalizeRepeat(entry.repeat);
   if (rule.status === "ended") throw new Error("该循环已结束");
+  if (rule.mode === "fixed") return manageFixedRepeat(entry, action, { occurrenceDate, occurredOn, now });
   if (["complete", "skip"].includes(action)) {
     if (rule.status !== "active") throw new Error("请先恢复循环后再完成或跳过");
     if (action === "complete" && (!validRepeatDate(occurredOn) || occurredOn > today)) {
@@ -139,7 +162,7 @@ export function manageRepeat(id, action, { occurredOn = "", now = new Date() } =
       completedOn: occurredOn, action, today });
     const history = { ...entry, completed: true, completedAt: now.toISOString(),
       occurredOn: action === "complete" ? occurredOn : "", repeatOutcome: action === "complete" ? "completed" : "skipped",
-      repeat: { ...rule, status: "history" } };
+      repeat: historyRepeat(rule) };
     let next;
     if (outcome.status !== "ended") {
       const template = reminderTemplate({ ...entry, ...rule.template, repeat: { ...rule, time: rule.template.time || rule.time } });
@@ -177,6 +200,104 @@ export function manageRepeat(id, action, { occurredOn = "", now = new Date() } =
   return updated;
 }
 
+// Fixed series are schedules, not a chain of completion-dependent todo records.
+// Rendering and cron derive occurrences; only explicit edits/actions persist data.
+function upgradeFixedReminder(entry) {
+  const rule = normalizeRepeat(entry.repeat);
+  if (rule.version >= 2) return { ...entry, repeat: rule };
+  const scheduledDate = rule.scheduledDate || entry.date;
+  const overrides = { ...rule.overrides };
+  if (validRepeatDate(scheduledDate)) {
+    overrides[scheduledDate] = { ...reminderTemplate(entry), date: entry.date, time: rule.time, ...overrides[scheduledDate] };
+  }
+  return { ...entry, repeat: { ...rule, version: 2, overrides, time: rule.template.time || rule.time,
+    skippedDates: rule.skippedDates || [], resumeAfter: rule.resumeAfter || "" } };
+}
+
+function fixedTarget(entry, occurrenceDate, now) {
+  const target = occurrenceDate ? fixedOccurrenceForDate(entry, occurrenceDate)
+    : nextFixedOccurrence(entry, now).occurrence;
+  if (!target) throw new Error("该期次已跳过或没有可操作的计划，请刷新后重试");
+  return target;
+}
+
+function updateFixedReminder(current, payload, requestedRule, scope, occurrenceDate, now) {
+  const entry = upgradeFixedReminder(current);
+  const previous = entry.repeat;
+  const active = { ...entry, repeat: { ...previous, status: "active" } };
+  if (scope === "once") {
+    const target = fixedTarget(active, occurrenceDate, now);
+    const date = Object.hasOwn(payload, "date") ? payload.date : target.date;
+    if (!validRepeatDate(date)) throw new Error("请选择有效日期");
+    const time = Object.hasOwn(payload, "repeat") ? requestedRule?.time || target.repeat.time : target.repeat.time;
+    const override = { ...reminderTemplate({ ...target, ...payload, repeat: { ...target.repeat, time } }), date, time };
+    return normalizeReminder({ ...entry, repeat: { ...previous,
+      overrides: { ...previous.overrides, [target.repeat.scheduledDate]: override } } });
+  }
+  const projected = nextFixedOccurrence(active, now).occurrence;
+  const from = occurrenceDate || projected?.repeat.scheduledDate || beijingDate(now);
+  if (!validRepeatDate(from)) throw new Error("期次日期无效");
+  const rule = normalizeRepeat({ ...previous, ...(Object.hasOwn(payload, "repeat") ? requestedRule : previous), version: 2,
+    seriesId: previous.seriesId, status: previous.status,
+    overrides: Object.fromEntries(Object.entries(previous.overrides).filter(([date]) => date < from)),
+    skippedDates: previous.skippedDates, resumeAfter: previous.resumeAfter });
+  rule.template = reminderTemplate({ ...entry, ...previous.template, ...payload, repeat: rule });
+  const scheduleChanged = ["freq", "mode", "interval", "unit", "workday", "startDate", "endDate"]
+    .some(key => rule[key] !== previous[key])
+    || JSON.stringify(rule.weekdays) !== JSON.stringify(previous.weekdays)
+    || ["time", "leadDays", "notificationEnabled"].some(key => rule.template[key] !== previous.template[key]);
+  if (scheduleChanged) rule.resumeAfter = now.toISOString();
+  // Keep the raw date only as a compatibility anchor; the next visible date is projected.
+  const first = firstRepeatDate(rule);
+  if (rule.status === "calendar_wait" && first.status === "active") rule.status = "active";
+  return normalizeReminder({ ...entry, ...rule.template, repeat: rule });
+}
+
+function manageFixedRepeat(current, action, { occurrenceDate, occurredOn, now }) {
+  const entry = upgradeFixedReminder(current);
+  const rule = entry.repeat;
+  if (["complete", "skip"].includes(action)) {
+    if (!["active", "calendar_wait"].includes(rule.status)) throw new Error("请先恢复循环后再完成或跳过");
+    if (action === "complete" && (!validRepeatDate(occurredOn) || occurredOn > beijingDate(now))) {
+      throw new Error("请确认今天或之前的实际发生日期");
+    }
+    const target = fixedTarget(entry, occurrenceDate, now);
+    const scheduledDate = target.repeat.scheduledDate;
+    if (action === "complete" && state.reminders.some(item => item.repeat?.seriesId === rule.seriesId
+      && item.repeat.status === "history" && item.repeat.scheduledDate === scheduledDate && item.repeatOutcome === "completed")) {
+      throw new Error("本期已记录完成，无需重复记录");
+    }
+    const historical = normalizeReminder({ ...target, id: crypto.randomUUID(), completed: true,
+      completedAt: now.toISOString(), occurredOn: action === "complete" ? occurredOn : "",
+      repeatOutcome: action === "complete" ? "completed" : "skipped",
+      repeat: historyRepeat(target.repeat) });
+    // Completion records do not cancel a fixed reminder. Only an explicit skip excludes it.
+    const active = action === "skip" ? { ...entry, repeat: { ...rule,
+      skippedDates: [...new Set([...rule.skippedDates, scheduledDate])] } } : entry;
+    commitReminders([...state.reminders.map(item => item.id === entry.id ? active : item), historical]);
+    return historical;
+  }
+  let updated;
+  if (action === "resume") {
+    if (!["paused", "calendar_wait"].includes(rule.status) && nextFixedOccurrence(entry, now).status !== "calendar_wait") {
+      throw new Error("该循环无需恢复");
+    }
+    updated = { ...entry, repeat: { ...rule, status: "active", resumeAfter: now.toISOString() } };
+    // Unknown future calendar data is a projected status. Keep known last-period cron candidates alive.
+  } else {
+    if (action === "pause" && !["active", "calendar_wait"].includes(rule.status)) throw new Error("该循环无需暂停");
+    updated = { ...entry, repeat: { ...rule, status: action === "pause" ? "paused" : "ended" } };
+  }
+  commitReminders(state.reminders.map(item => item.id === entry.id ? updated : item));
+  return updated;
+}
+
+function historyRepeat(rule) {
+  // The historical record already contains its own effective fields. Copying every
+  // other occurrence override into each record would cause quadratic storage growth.
+  return { ...rule, status: "history", overrides: {}, skippedDates: [], resumeAfter: "", waitingAfterDate: "" };
+}
+
 function commitReminders(reminders) {
   const previous = state.reminders;
   state.reminders = reminders;
@@ -193,12 +314,16 @@ function reminderTemplate(entry) {
     notificationEnabled: item.notificationEnabled, time: item.repeat?.time || `${String(item.hour).padStart(2, "0")}:00` };
 }
 
-function prepareNewReminder(payload) {
+function prepareNewReminder(payload, now = new Date()) {
   const rule = normalizeRepeat(payload.repeat);
   if (!rule) return normalizeReminder(payload);
   if (payload.completed) throw new Error("已完成事项不能改成循环，请新建循环事项");
   const first = firstRepeatDate(rule);
   rule.seriesId = crypto.randomUUID();
+  rule.version = 2;
+  rule.overrides = {};
+  rule.skippedDates = [];
+  rule.resumeAfter = rule.mode === "fixed" ? now.toISOString() : "";
   rule.status = first.status;
   rule.scheduledDate = first.date || rule.startDate;
   rule.waitingAfterDate = "";
@@ -346,7 +471,7 @@ export function setNickname(nickname) {
 export function getSyncSnapshot() {
   return {
     version: 1,
-    capabilities: { repeat: 1 },
+    capabilities: { repeat: 2 },
     salary: {
       day: state.salary.day,
       amount: state.salary.amount,

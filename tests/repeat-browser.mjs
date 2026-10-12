@@ -25,7 +25,7 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 let count = 0;
 const reminder = (id, title) => ({ id, title, date: '2026-10-03', category: '其他', notes: '本地模拟备注', leadDays: 0, hour: 9, notificationEnabled: false, completed: false, completedAt: '', createdAt: '2026-09-28T00:00:00Z' });
-async function scenario(name, run, { loggedIn = true, timezoneId = 'Asia/Shanghai', fixedNow = null } = {}) {
+async function scenario(name, run, { loggedIn = true, timezoneId = 'Asia/Shanghai', fixedNow = null, advancingClock = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId, serviceWorkers: 'allow' });
   let snapshot = { ...structuredClone(DEFAULT_STATE), reminders: [reminder('r1', '测试事项一'), reminder('r2', '测试事项二')] };
   let revision = 1, failSave = false, failLoad = false, conflict = false;
@@ -49,7 +49,7 @@ async function scenario(name, run, { loggedIn = true, timezoneId = 'Asia/Shangha
     return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) });
   });
   const page = await context.newPage();
-  if (fixedNow) await page.clock.setFixedTime(new Date(fixedNow));
+  if (fixedNow) { if (advancingClock) await page.clock.install({time:new Date(fixedNow)}); else await page.clock.setFixedTime(new Date(fixedNow)); }
   page.setDefaultTimeout(8000);
   page.on('pageerror', e => errors.push(e.message));
   try {
@@ -100,14 +100,14 @@ try {
   await page.locator('#reminderList [data-reminder-detail="r1"] .reminder-item__body').click();await page.click('#reminderDetailEdit');await page.click('[data-repeat-scope="once"]');await page.locator('#reminderFormHeading').filter({hasText:'编辑事项'}).waitFor();
   assert.equal(await page.locator('#reminderRepeatButton').isDisabled(),true);
   await page.fill('#reminderTitleInput','仅本次改名');await page.fill('#reminderRepeatTime','10:25');await page.click('#reminderSubmitButton');await settle(page);
-  let saved=api.snapshot().reminders.find(item=>item.id==='r1');assert.equal(saved.title,'仅本次改名');assert.equal(saved.repeat.time,'10:25');assert.equal(saved.repeat.template.title,'循环测试');assert.equal(saved.repeat.template.time,'09:15');
+  let saved=api.snapshot().reminders.find(item=>item.id==='r1');const exception=Object.values(saved.repeat.overrides).find(value=>value.title==='仅本次改名');assert.equal(exception.time,'10:25');assert.equal(saved.repeat.template.title,'循环测试');assert.equal(saved.repeat.template.time,'09:15');
   await page.locator('#reminderList [data-reminder-detail="r1"] .reminder-item__body').click();await page.click('#reminderDetailEdit');await page.click('[data-repeat-scope="series"]');await page.locator('#reminderFormHeading').filter({hasText:'编辑事项'}).waitFor();
   await page.fill('#reminderTitleInput','系列改名');await page.click('#reminderRepeatButton');await page.selectOption('#repeatFrequency','custom');await page.selectOption('#repeatMode','after');await page.fill('#repeatInterval','20');await page.selectOption('#repeatUnit','day');
   await page.locator('#repeatForm button[type="submit"]').click();await page.click('#reminderSubmitButton');await settle(page);
   saved=api.snapshot().reminders.find(item=>item.id==='r1');assert.equal(saved.repeat.template.title,'系列改名');assert.equal(saved.repeat.mode,'after');assert.equal(saved.repeat.interval,20);
  });
  await scenario('detail completion generates exactly one next occurrence and locks history',async(page,api)=>{
-  fixture(api);await page.goto(origin+'/#reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
+  fixture(api,{freq:'custom',mode:'after',interval:1,unit:'day'});await page.goto(origin+'/#reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
   assert.match(await page.locator('#reminderDetailRepeat').innerText(),/09:15 北京时间/);
   await page.click('#reminderDetailComplete');await page.fill('#occurrenceDate',today());await page.click('#occurrenceSubmit');
   await page.locator('#reminderDetailState').filter({hasText:'本次已完成并同步'}).waitFor();
@@ -140,10 +140,74 @@ try {
   assert.equal(await page.locator('#occurrenceDate').getAttribute('max'),'2026-10-13');
   await page.click('#occurrenceSubmit');
   await page.locator('#reminderDetailState').filter({hasText:'本次已完成并同步'}).waitFor();
-  const history=api.snapshot().reminders.find(item=>item.id==='r1');
-  assert.equal(history.occurredOn,'2026-10-13');assert.equal(history.repeat.status,'history');
+  const history=api.snapshot().reminders.find(item=>item.repeat?.status==='history');
+  assert.equal(history.occurredOn,'2026-10-13');assert.equal(history.repeat.scheduledDate,'2026-10-13');assert.equal(api.snapshot().reminders.find(item=>item.id==='r1').repeat.status,'active');
   const next=api.snapshot().reminders.find(item=>item.repeat && !item.completed);
-  assert.equal(next.date,'2026-10-14');
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月13日 09:15 北京时间');
  },{timezoneId:'America/Los_Angeles',fixedNow:'2026-10-12T16:30:00Z'});
+ await scenario('fixed reminders advance automatically on the same screen and preserve notification occurrence',async(page,api)=>{
+  fixture(api,{time:'16:27',template:{title:'循环测试',category:'其他',notes:'固定自动提醒',leadDays:0,notificationEnabled:false,time:'16:27'}});
+  await board(page);
+  const card=page.locator('#reminderList [data-reminder-detail="r1"]');
+  assert.match(await card.innerText(),/下次提醒 10月12日 16:27 北京时间/);
+  await card.locator('.reminder-item__body').click();await page.locator('#reminderDetail[open]').waitFor();
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月12日 16:27 北京时间');
+  const end=page.locator('[data-repeat-action="end"]');assert.equal(await end.evaluate(el=>el.classList.contains('button--secondary')),true);
+  assert.notEqual(await end.evaluate(el=>getComputedStyle(el).borderStyle),'none');
+  await page.clock.fastForward(120000);
+  await page.locator('#reminderDetailNext').filter({hasText:'下次提醒 10月13日 16:27 北京时间'}).waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.screenshot({path:'/tmp/weekday-rem007-fixed-next-detail.png'});
+  await page.click('#reminderDetailClose');assert.match(await card.innerText(),/下次提醒 10月13日 16:27 北京时间/);await page.screenshot({path:'/tmp/weekday-rem007-fixed-next-list.png'});
+  assert.equal(api.snapshot().reminders.filter(item=>item.repeat).length,1);
+  await page.reload();await page.locator('[data-switch-view="reminders"]').first().click();assert.match(await card.innerText(),/下次提醒 10月13日 16:27 北京时间/);
+  await page.evaluate(()=>location.hash='reminder=r1&occurrence=2026-10-12');await page.locator('#reminderDetail[open]').waitFor();
+  assert.match(await page.locator('#reminderDetailMeta').innerText(),/2026年10月12日/);
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月13日 16:27 北京时间');
+  await page.click('#reminderDetailComplete');assert.match(await page.locator('#occurrenceTitle').innerText(),/2026年10月12日/);
+  await page.click('#occurrenceSubmit');await page.locator('#reminderDetailState').filter({hasText:'本次已完成并同步'}).waitFor();
+  const history=api.snapshot().reminders.find(item=>item.repeat?.status==='history');assert.equal(history.repeat.scheduledDate,'2026-10-12');
+  assert.equal(api.snapshot().reminders.find(item=>item.id==='r1').repeat.status,'active');
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月13日 16:27 北京时间');
+  assert.equal(await page.locator('#reminderDetailComplete').isDisabled(),true);assert.equal(await page.locator('#snoozePanel').isVisible(),false);
+  await page.click('#reminderDetailClose');await page.evaluate(()=>location.hash='reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
+  assert.match(await page.locator('#reminderDetailMeta').innerText(),/2026年10月13日/);
+ },{fixedNow:'2026-10-12T08:26:00Z',advancingClock:true});
+ await scenario('fixed current editor and completion dialog freeze their slot across the scheduled minute',async(page,api)=>{
+  fixture(api,{time:'16:27',template:{title:'循环测试',category:'其他',notes:'固定自动提醒',leadDays:0,notificationEnabled:false,time:'16:27'}});
+  await page.goto(origin+'/#reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
+  await page.click('#reminderDetailEdit');await page.click('[data-repeat-scope="once"]');await page.locator('#reminderFormHeading').filter({hasText:'编辑事项'}).waitFor();
+  assert.equal(await page.inputValue('#reminderDateInput'),'2026-10-12');
+  await page.clock.fastForward(120000);await page.fill('#reminderTitleInput','只改12日');await page.fill('#reminderRepeatTime','18:00');await page.click('#reminderSubmitButton');
+  await page.locator('#reminderList').filter({hasText:'只改12日'}).waitFor();
+  const raw=api.snapshot().reminders.find(item=>item.id==='r1');assert.equal(raw.repeat.overrides['2026-10-12'].title,'只改12日');assert.equal(raw.repeat.overrides['2026-10-13'],undefined);
+  await page.locator('#reminderList [data-reminder-detail="r1"] .reminder-item__body').click();await page.click('#reminderDetailComplete');
+  assert.match(await page.locator('#occurrenceTitle').innerText(),/2026年10月12日/);
+  await page.clock.fastForward(2*3600000);await page.click('#occurrenceSubmit');await page.locator('#reminderDetailState').filter({hasText:'本次已完成并同步'}).waitFor();
+  const history=api.snapshot().reminders.find(item=>item.repeat?.status==='history');assert.equal(history.repeat.scheduledDate,'2026-10-12');assert.equal(history.title,'只改12日');
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月13日 16:27 北京时间');
+  const actualLead=await page.evaluate(async()=>{const {displayReminder,nextReminderLabel}=await import('/scripts/views/repeat.js');const {getState}=await import('/scripts/state.js');const raw=getState().reminders.find(item=>item.id==='r1');const copy={...raw,repeat:{...raw.repeat,overrides:{},template:{...raw.repeat.template,leadDays:1}}};return nextReminderLabel(displayReminder(copy).nextReminderAt);});
+  assert.equal(actualLead,'下次提醒 10月13日 16:27 北京时间');
+ },{fixedNow:'2026-10-12T08:26:00Z',advancingClock:true});
+ await scenario('completed future slot keeps active-series edit and delete targets separate from history',async(page,api)=>{
+  fixture(api,{time:'16:27',template:{title:'循环测试',category:'其他',notes:'固定自动提醒',leadDays:0,notificationEnabled:false,time:'16:27'}});
+  await page.setViewportSize({width:1000,height:1000});
+  await page.goto(origin+'/#reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
+  await page.click('#reminderDetailComplete');await page.click('#occurrenceSubmit');await page.locator('#reminderDetailState').filter({hasText:'本次已完成并同步'}).waitFor();
+  const history=api.snapshot().reminders.find(item=>item.repeat?.status==='history');assert.notEqual(history.id,'r1');
+  await page.click('#reminderDetailClose');
+  const card=page.locator('#reminderList [data-reminder-detail="r1"]');
+  assert.match(await card.innerText(),/本次已记录/);assert.equal(await card.locator('[data-action="complete"]').count(),0);
+  await card.locator('[data-action="edit"]').click();await page.click('[data-repeat-scope="once"]');await page.locator('#reminderFormHeading').filter({hasText:'编辑事项'}).waitFor();
+  await page.fill('#reminderTitleInput','已完成但仍提醒');await page.click('#reminderSubmitButton');await settle(page);
+  assert.equal(api.snapshot().reminders.find(item=>item.id===history.id).title,'循环测试');
+  assert.equal(api.snapshot().reminders.find(item=>item.id==='r1').repeat.overrides['2026-10-12'].title,'已完成但仍提醒');
+  await card.locator('.reminder-item__body').click();await page.locator('#reminderDetail[open]').waitFor();assert.equal(await page.locator('#reminderDetailComplete').isDisabled(),true);assert.equal(await page.locator('#snoozePanel').isVisible(),false);
+  await page.click('#reminderDetailClose');
+  let warning='';page.once('dialog',async dialog=>{warning=dialog.message();await dialog.dismiss();});await card.locator('[data-action="delete"]').click();assert.match(warning,/停止整个循环/);
+  assert.ok(api.snapshot().reminders.find(item=>item.id==='r1'));
+  page.once('dialog',dialog=>dialog.accept());await card.locator('[data-action="delete"]').click();await settle(page);
+  assert.equal(api.snapshot().reminders.find(item=>item.id==='r1'),undefined);assert.ok(api.snapshot().reminders.find(item=>item.id===history.id));
+ },{fixedNow:'2026-10-12T08:26:00Z'});
  console.log(`Passed ${count} recurring UI scenarios`);
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

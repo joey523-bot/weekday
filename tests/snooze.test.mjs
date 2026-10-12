@@ -82,6 +82,28 @@ test('complete then restore never rearms loop; stale worker job suppressed',asyn
  assert.equal((await f.save(false,2)).status,200);
  await processSnoozeEntry(r,f.env,at('2026-09-28T13:00:00'));assert.equal(f.sent.length,0);
 });
+test('fixed completion stops an existing snooze while leaving the calendar series active', async t => {
+ const f=fixture(t);t.mock.timers.enable({apis:['Date'],now:base});
+ const active={...f.reminder,repeat:{version:2,seriesId:'fixed-series',freq:'day',mode:'fixed',
+  startDate:'2026-09-28',scheduledDate:'2026-09-28',time:'16:27',status:'active',
+  template:{title:'带钥匙',time:'16:27',leadDays:0,notificationEnabled:true}}};
+ const initial={capabilities:{repeat:2},reminders:[active]};
+ f.sqlite.prepare("UPDATE account_sync SET snapshot_data=? WHERE user_id='u'").run(JSON.stringify(initial));
+ assert.equal((await f.post({mode:'once',minutes:10})).status,200);const old=f.rule();
+ const history={...active,id:'history',completed:true,completedAt:base.toISOString(),occurredOn:'2026-09-28',
+  repeatOutcome:'completed',repeat:{...active.repeat,status:'history'}};
+ const response=await onRequestPut({env:f.env,request:f.request({baseRevision:1,
+  snapshot:{...initial,reminders:[active,history]}})});
+ assert.equal(response.status,200);assert.equal(f.rule().active,0);
+ const saved=JSON.parse(f.sqlite.prepare("SELECT snapshot_data FROM account_sync WHERE user_id='u'").get().snapshot_data);
+ assert.equal(saved.reminders[0].repeat.status,'active');assert.equal(saved.reminders[0].completed,false);
+ await processSnoozeEntry(old,f.env,at('2026-09-28T12:10:00'));assert.equal(f.sent.length,0);
+ // A newly requested snooze is independent of an earlier completed occurrence.
+ t.mock.timers.setTime(base.getTime()+60000);
+ assert.equal((await f.post({mode:'once',minutes:10})).status,200);
+ assert.equal((await onRequestPut({env:f.env,request:f.request({baseRevision:2,snapshot:saved})})).status,200);
+ assert.equal(f.rule().active,1);
+});
 test('stop or replace rejects stale job; stop is idempotent',async t=>{
  const f=fixture(t);t.mock.timers.enable({apis:['Date'],now:base});await f.post({mode:'once',minutes:10});const old=f.rule();
  await f.post({mode:'once',minutes:30});await processSnoozeEntry(old,f.env,at('2026-09-28T12:10:00'));assert.equal(f.sent.length,0);

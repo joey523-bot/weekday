@@ -1,4 +1,4 @@
-import { normalizeRepeat, repeatSummary, firstRepeatDate, nextRepeatDate, beijingDate } from '../utils/repeat.js';
+import { normalizeRepeat, repeatSummary, firstRepeatDate, nextRepeatDate, beijingDate, nextFixedOccurrence, fixedOccurrenceForDate } from '../utils/repeat.js';
 
 export function repeatDialogs() {
   return `<dialog id="repeatDialog" class="reminder-detail repeat-dialog" aria-labelledby="repeatHeading">
@@ -40,7 +40,7 @@ export function bindRepeatSettings(root, refs, onChange) {
   function showSummary() {
     $('reminderRepeatSummary').textContent = repeatSummary(current);
     $('reminderRepeatButton').disabled = locked;
-    $('reminderRepeatScopeNote').textContent = locked ? '仅修改本次；重复规则与后续计划保持不变。' : current ? '日期由重复规则安排；如需调整，请打开重复设置。仅保留当前一期。' : '';
+    $('reminderRepeatScopeNote').textContent = locked ? '仅修改本次；重复规则与后续计划保持不变。' : current ? '日期由重复规则安排；如需调整，请打开重复设置。固定周期自动接续下次提醒。' : '';
     refs.reminderDateInput.disabled = Boolean(current && !locked);
     refs.reminderHourSelect.closest('label').hidden = Boolean(current);
     $('reminderRepeatTimeField').hidden = !current;
@@ -60,7 +60,7 @@ export function bindRepeatSettings(root, refs, onChange) {
     $('repeatEnd').required = !$('repeatEndField').hidden;
     $('repeatModeNote').textContent = freq === 'none' ? '普通事项只在所选日期提醒。' : freq === 'custom' && mode === 'after'
       ? '从实际完成日计算下一次；跳过从当天计算。未完成时不开始下一轮。'
-      : '固定周期按原计划计算；逾期只保留本次，完成或跳过后接续未来一期，缺少对应日时跳过该期。';
+      : '固定周期到点自动接续，不需要点完成。完成只记历史；跳过只取消所选这一次，缺少对应日时跳过该期。';
   }
   $('reminderRepeatButton').addEventListener('click', () => {
     if (locked) return;
@@ -125,4 +125,31 @@ export function repeatStatusLabel(reminder) {
   if (!reminder?.repeat) return '';
   if (reminder.repeat.status === 'history') return reminder.repeatOutcome === 'skipped' ? '本次已跳过' : '本次已完成';
   return {active:'进行中',paused:'已暂停',ended:'循环已结束',calendar_wait:'工作日日历待更新'}[reminder.repeat.status] || '';
+}
+
+// Presentation-only projection. Never write a projected cursor or terminal status to state.
+export function displayReminder(reminder, { occurrenceDate = '', now = new Date(), reminders = [], resolveHistory = true } = {}) {
+  if (!reminder?.repeat || reminder.repeat.mode !== 'fixed' || reminder.repeat.status === 'history') return reminder;
+  const isRunning = ['active','calendar_wait'].includes(reminder.repeat.status);
+  const next = isRunning ? nextFixedOccurrence(reminder, now) : {dueAt:'',occurrence:null};
+  const history = occurrenceDate && resolveHistory ? reminders.find(item => item.repeat?.status === 'history'
+    && item.repeat.seriesId === reminder.repeat.seriesId && item.repeat.scheduledDate === occurrenceDate) : null;
+  if (history) return { ...history, nextReminderAt: next.dueAt || '' };
+  if (!isRunning && !occurrenceDate) return reminder;
+  const source = isRunning ? reminder : { ...reminder, repeat:{...reminder.repeat,status:'active'} };
+  const occurrence = occurrenceDate ? fixedOccurrenceForDate(source, occurrenceDate) : next.occurrence;
+  if (!occurrence) {
+    if (occurrenceDate) throw new Error('这次提醒已跳过或不再属于当前循环，请查看历史记录或当前安排。');
+    return { ...reminder, repeat: { ...reminder.repeat, status: next.status }, nextReminderAt: '' };
+  }
+  const recorded = reminders.find(item => item.repeat?.status === 'history' && item.repeat.seriesId === reminder.repeat.seriesId
+    && item.repeat.scheduledDate === occurrence.repeat.scheduledDate);
+  return { ...occurrence, repeat:{...occurrence.repeat,status:isRunning ? occurrence.repeat.status : reminder.repeat.status},
+    nextReminderAt: next.dueAt || '', recordedOutcome: recorded?.repeatOutcome || '' };
+}
+
+export function nextReminderLabel(stamp) {
+  if (!stamp) return '';
+  const value = new Date(new Date(stamp).getTime() + 8 * 3600000).toISOString();
+  return `下次提醒 ${Number(value.slice(5,7))}月${Number(value.slice(8,10))}日 ${value.slice(11,16)} 北京时间`;
 }

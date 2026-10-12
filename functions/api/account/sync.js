@@ -51,6 +51,13 @@ export async function onRequestPut(context) {
           WHERE a.user_id = reminder_snoozes.user_id AND json_extract(r.value, '$.id') = reminder_snoozes.reminder_id
             AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0
             AND (json_extract(r.value, '$.repeat') IS NULL OR json_extract(r.value, '$.repeat.status') = 'active')
+            AND NOT EXISTS (
+              SELECT 1 FROM json_each(a.snapshot_data, '$.reminders') h
+              WHERE json_extract(r.value, '$.repeat.mode') = 'fixed'
+                AND json_extract(h.value, '$.repeat.seriesId') = json_extract(r.value, '$.repeat.seriesId')
+                AND json_extract(h.value, '$.repeat.status') = 'history'
+                AND json_extract(h.value, '$.completedAt') >= reminder_snoozes.updated_at
+            )
         )`).bind(now, result.session.user_id),
       context.env.DB.prepare(`DELETE FROM reminder_push_rules WHERE installation_id IN (
         SELECT installation_id FROM salary_push_subscriptions WHERE user_id = ?

@@ -35,7 +35,7 @@ export async function processRepeatAccount(record, env, now = new Date()) {
         body: Number(live.leadDays) > 0 ? `${live.leadDays}天后需要处理：${live.title}（循环事项）。` : `今天需要处理：${live.title}（循环事项）。`,
         tag: `repeat-${live.repeat.seriesId}-${live.repeat.scheduledDate}`,
         reminderId: live.id,
-        url: `${(env.APP_URL || '/').split('#')[0]}#reminder=${encodeURIComponent(live.id)}`
+        url: `${(env.APP_URL || '/').split('#')[0]}#reminder=${encodeURIComponent(live.id)}&occurrence=${encodeURIComponent(live.repeat.scheduledDate)}`
       }), { TTL: 300 });
       await setStatus(env, key, "sent");
     } catch (error) {

@@ -45,9 +45,9 @@ function fixture(t) {
   return {sql,DB,env,sent,record,update,snapshot,request,save};
 }
 
-test('minute precision and Shanghai midnight; only current occurrence within one hour is eligible',()=>{
+test('minute precision and Shanghai midnight; each fixed slot has its own one-hour window',()=>{
   const item=reminder(), row={snapshot_data:{reminders:[item]}};
-  for(const value of ['2026-10-12T09:16:59','2026-10-12T10:17:00','2026-10-13T09:17:00']) assert.equal(repeatPushCandidates(row,at(value)).length,0);
+  for(const value of ['2026-10-12T09:16:59','2026-10-12T10:17:00']) assert.equal(repeatPushCandidates(row,at(value)).length,0);
   for(const value of ['2026-10-12T09:17:00','2026-10-12T09:20:00','2026-10-12T10:16:59']) assert.equal(repeatPushCandidates(row,at(value)).length,1);
   item.repeat.time='00:03';item.leadDays=1;
   assert.equal(repeatPushCandidates(row,at('2026-10-11T00:03:00'))[0].dueAt,'2026-10-10T16:03:00.000Z');
@@ -57,7 +57,7 @@ test('closed app needs no client rules: concurrent Cron sends once per account/d
   const f=fixture(t), record=await f.record();
   await Promise.all(Array.from({length:8},()=>processRepeatAccount(record,f.env,now)));
   assert.equal(f.sent.length,1); assert.equal(f.sent[0].endpoint,'https://example.test/owner');
-  assert.equal(f.sent[0].url,'https://example.test#reminder=r');assert.match(f.sent[0].tag,/repeat-series-2026-10-12/);
+  assert.equal(f.sent[0].url,'https://example.test#reminder=r&occurrence=2026-10-12');assert.match(f.sent[0].tag,/repeat-series-2026-10-12/);
   await processRepeatAccount(record,f.env,at('2026-10-12T09:22:00'));assert.equal(f.sent.length,1);
   assert.equal(f.sql.prepare('SELECT status FROM recurring_reminder_deliveries').get().status,'sent');
 });
@@ -71,9 +71,9 @@ test('two devices each receive once; changing current date/time does not re-send
   await processRepeatAccount(await f.record(),f.env,at('2026-10-12T09:30:00'));assert.equal(f.sent.length,2);
 });
 
-test('paused, ended, history, unknown calendar, completed, notification-off and stale revisions never send',async t=>{
+test('paused, ended, history, notification-off and stale revisions never send',async t=>{
   for(const change of [r=>{r.repeat.status='paused'},r=>{r.repeat.status='ended'},r=>{r.repeat.status='history'},
-    r=>{r.repeat.status='calendar_wait'},r=>{r.completed=true},r=>{r.notificationEnabled=false}]) {
+    r=>{r.notificationEnabled=false}]) {
     const f=fixture(t),stale=await f.record();f.update(s=>change(s.reminders[0]));
     await processRepeatAccount(stale,f.env,now);await processRepeatAccount(await f.record(),f.env,now);assert.equal(f.sent.length,0);
   }
@@ -185,4 +185,61 @@ test('deleted recurring item cannot be resurrected by stale ordinary-device push
   await processReminderEntry({user_id:'owner',reminder_id:'r',reminder_date:'2026-10-12',reminder_hour:9},f.env);
   let pending;await worker.scheduled({},f.env,{waitUntil:job=>pending=job});await pending;
   assert.equal(f.sent.filter(item=>item.endpoint==='https://example.test/owner').length,0);
+});
+
+test('unchanged fixed account sends consecutive days without opening app or completing',async t=>{
+ const f=fixture(t),record=await f.record();
+ for(const day of [12,13,14]) {
+  const clock=at(`2026-10-${day}T09:20:00`);
+  await Promise.all([processRepeatAccount(record,f.env,clock),processRepeatAccount(record,f.env,clock)]);
+ }
+ assert.equal(f.sent.length,3);
+ assert.deepEqual(f.sent.map(item=>item.tag),['repeat-series-2026-10-12','repeat-series-2026-10-13','repeat-series-2026-10-14']);
+ assert.equal(f.snapshot().reminders[0].date,'2026-10-12');
+});
+
+test('completion on active fixed series does not stop its current or future reminder',async t=>{
+ const f=fixture(t);f.update(s=>{s.reminders[0].completed=true;});
+ for(const day of [12,13])await processRepeatAccount(await f.record(),f.env,at(`2026-10-${day}T09:20:00`));
+ assert.equal(f.sent.length,2);
+});
+
+test('v2 skip and individual notification override exclude only their slots',async t=>{
+ const f=fixture(t);f.update(s=>{const r=s.reminders[0].repeat;r.version=2;r.skippedDates=['2026-10-12'];r.overrides={'2026-10-13':{notificationEnabled:false}};s.capabilities.repeat=2;});
+ for(const day of [12,13,14])await processRepeatAccount(await f.record(),f.env,at(`2026-10-${day}T09:20:00`));
+ assert.equal(f.sent.length,1);assert.equal(f.sent[0].tag,'repeat-series-2026-10-14');
+});
+
+test('two explicitly coincident slots keep distinct claims and occurrence routes',async t=>{
+ const f=fixture(t);f.update(s=>{const r=s.reminders[0].repeat;r.version=2;r.overrides={'2026-10-14':{date:'2026-10-13'}};s.capabilities.repeat=2;});
+ await processRepeatAccount(await f.record(),f.env,at('2026-10-13T09:20:00'));
+ assert.equal(f.sent.length,2);assert.equal(new Set(f.sent.map(x=>x.tag)).size,2);
+ assert.ok(f.sent.some(x=>x.url.endsWith('occurrence=2026-10-14')));
+});
+
+test('v2 data needs capability2 on both incoming and stored sides; v1 clients still save v1 data',async t=>{
+ const f=fixture(t),v2=f.snapshot();v2.reminders[0].repeat.version=2;
+ assert.equal((await f.save({baseRevision:1,snapshot:v2})).status,426);
+ v2.capabilities.repeat=2;
+ assert.equal((await f.save({baseRevision:1,snapshot:v2})).status,200);
+ const old=f.snapshot();old.capabilities.repeat=1;old.reminders[0].repeat.version=1;
+ assert.equal((await f.save({baseRevision:2,snapshot:old})).status,426);
+ assert.equal(f.snapshot().reminders[0].repeat.version,2);
+ const newer=f.snapshot();newer.reminders[0].repeat.overrides={'2026-10-13':{time:'12:45'}};
+ assert.equal((await f.save({baseRevision:2,snapshot:newer})).status,200);
+ assert.equal(f.snapshot().reminders[0].repeat.overrides['2026-10-13'].time,'12:45');
+});
+
+test('unknown future calendar preserves last known delayed reminder but never guesses next year',async t=>{
+ const f=fixture(t);f.update(s=>{const item=s.reminders[0];item.date='2026-12-31';item.repeat={...item.repeat,version:2,freq:'weekday',workday:'actual',startDate:'2026-12-31',scheduledDate:'2026-12-31'};});
+ await processRepeatAccount(await f.record(),f.env,at('2026-12-31T09:20:00'));
+ await processRepeatAccount(await f.record(),f.env,at('2027-01-01T09:20:00'));
+ assert.equal(f.sent.length,1);assert.equal(f.sent[0].tag,'repeat-series-2026-12-31');
+});
+
+test('after mode remains completion dependent and never projects later dates',async t=>{
+ const f=fixture(t);f.update(s=>{s.reminders[0].repeat={...s.reminders[0].repeat,freq:'custom',mode:'after',unit:'day',interval:1};});
+ await processRepeatAccount(await f.record(),f.env,at('2026-10-13T09:20:00'));assert.equal(f.sent.length,0);
+ f.update(s=>{s.reminders[0].completed=true});
+ await processRepeatAccount(await f.record(),f.env,now);assert.equal(f.sent.length,0);
 });
