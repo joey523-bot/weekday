@@ -38,7 +38,7 @@ export function nextSnoozeTime(rule, now = new Date()) {
   return new Date(next).toISOString();
 }
 export function isReminderDue(reminder, now = new Date()) {
-  if (reminder.completed) return false;
-  const time = parseChinaInput(`${reminder.date}T${String(Number(reminder.hour) || 0).padStart(2, '0')}:00`);
+  if (reminder.completed || (reminder.repeat && reminder.repeat.status !== 'active')) return false;
+  const time = parseChinaInput(`${reminder.date}T${reminder.repeat?.time || `${String(Number(reminder.hour) || 0).padStart(2, '0')}:00`}`);
   return Number.isFinite(time) && now.getTime() >= time;
 }

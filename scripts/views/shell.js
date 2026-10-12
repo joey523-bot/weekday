@@ -1,3 +1,4 @@
+import { repeatDialogs } from "./repeat.js";
 import { APP_THEMES } from "../config.js";
 
 export function createShell() {
@@ -83,6 +84,7 @@ export function createShell() {
           </div>
         </section>
 
+        ${repeatDialogs()}
         <dialog id="occurrenceDialog" class="reminder-detail" aria-labelledby="occurrenceHeading">
           <form class="stack-form">
             <h2 id="occurrenceHeading">确认实际发生日期</h2>
@@ -100,11 +102,20 @@ export function createShell() {
           <div class="stack-form">
             <h2 id="reminderDetailTitle" tabindex="-1" autofocus></h2>
             <p id="reminderDetailMeta" class="form-note"></p>
+            <p id="reminderDetailRepeat" class="form-note" hidden></p>
             <p id="reminderDetailOccurrence" class="form-note"></p>
             <button id="reminderDetailOccurrenceEdit" class="button button--link" type="button" hidden>补填实际发生日期</button>
             <p id="reminderDetailNotes" class="reminder-detail__notes"></p>
             <p id="reminderDetailState" class="form-note" aria-live="polite"></p>
             <button id="reminderDetailComplete" class="button button--primary" type="button">完成事项</button>
+            <section id="repeatManagement" class="repeat-management" aria-label="循环管理" hidden>
+              <p id="repeatDetailNote" class="form-note"></p>
+              <button type="button" class="button button--secondary" data-repeat-action="skip">跳过本次</button>
+              <button type="button" class="button button--secondary" data-repeat-action="pause">暂停循环</button>
+              <button type="button" class="button button--secondary" data-repeat-action="resume" hidden>恢复循环</button>
+              <button type="button" class="button button--link" data-repeat-action="end">结束循环</button>
+              <button type="button" class="button button--secondary" data-repeat-action="sync" hidden>重试同步</button>
+            </section>
             <button id="reminderDetailEdit" class="button button--secondary" type="button">编辑事项</button>
             <section id="snoozePanel" class="snooze-panel" aria-label="稍后提醒">
               <p id="snoozeStatus" class="form-note" aria-live="polite"></p>
@@ -195,6 +206,8 @@ export function createShell() {
                 <button id="cancelCategoryButton" class="button button--ghost" type="button">取消</button>
               </div>
               <p id="categoryState" role="status"></p>
+              <button id="reminderRepeatButton" class="repeat-entry" type="button"><span>重复</span><span id="reminderRepeatSummary">不重复</span><span aria-hidden="true">›</span></button>
+              <p id="reminderRepeatScopeNote" class="form-note"></p>
               <fieldset class="reminder-timing">
                 <legend>提醒安排</legend>
                 <label class="reminder-switch">
@@ -211,6 +224,7 @@ export function createShell() {
                     <span class="field__label">推送时刻</span>
                     <select id="reminderHourSelect" name="reminderHour" class="select">${hourOptions()}</select>
                   </label>
+                  <label id="reminderRepeatTimeField" class="field" hidden><span class="field__label">时间（北京时间）</span><input id="reminderRepeatTime" class="input" type="time" step="60" /></label>
                 </div>
                 <p class="timing-hint">“当天”表示在事项日期当天提醒；若定时任务延迟，会在该小时内自动补发一次。</p>
               </fieldset>

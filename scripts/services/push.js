@@ -109,7 +109,8 @@ export async function syncReminderPushRules({ reminders }) {
       leadDays: reminder.leadDays,
       hour: reminder.hour,
       notificationEnabled: reminder.notificationEnabled,
-      completed: reminder.completed
+      completed: reminder.completed,
+      repeat: reminder.repeat || null
     }))
   });
 }

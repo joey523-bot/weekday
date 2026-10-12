@@ -20,7 +20,9 @@ export async function onRequestPost(context) {
   }
 
   const subscription = await context.env.DB.prepare(
-    "SELECT installation_id FROM salary_push_subscriptions WHERE installation_id = ? AND user_id = ? AND enabled = 1"
+    `SELECT d.installation_id, a.snapshot_data FROM salary_push_subscriptions d
+      LEFT JOIN account_sync a ON a.user_id = d.user_id
+      WHERE d.installation_id = ? AND d.user_id = ? AND d.enabled = 1`
   )
     .bind(payload.installationId, session.session.user_id)
     .first();
@@ -29,6 +31,12 @@ export async function onRequestPost(context) {
     return badRequest("请先开启通知权限");
   }
 
+  // An old client may omit repeat. The account snapshot remains authoritative.
+  let stored;
+  try { stored = JSON.parse(subscription.snapshot_data || '{}'); }
+  catch { return badRequest("账号事项数据暂时不可用，请重试", 503); }
+  const recurringIds = new Set((stored.reminders || []).filter(item => item?.repeat != null).map(item => item.id));
+  payload.reminders = payload.reminders.filter(item => !recurringIds.has(item.reminderId));
   const now = new Date().toISOString();
   const statements = [
     context.env.DB.prepare(`DELETE FROM reminder_push_rules WHERE installation_id = ?

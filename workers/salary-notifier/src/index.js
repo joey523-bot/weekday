@@ -1,3 +1,5 @@
+import { processRepeatAccount } from "./repeat.js";
+import { REPEAT_ACCOUNT_SELECT, REPEAT_ACCOUNT_FILTER } from "../../../functions/_utils/repeat-push.js";
 import { processCycleAccount } from "./cycle.js";
 import { CYCLE_ACCOUNT_SELECT } from "../../../functions/_utils/cycle-push.js";
 import { processSnoozeEntry } from "./snooze.js";
@@ -10,7 +12,7 @@ const FIXED_TIMEZONE = "Asia/Shanghai";
 
 export default {
   async scheduled(controller, env, ctx) {
-    const [salaryRecords, reminderRecords, dailyRecords, snoozes, cycleAccounts] = await Promise.all([
+    const [salaryRecords, reminderRecords, dailyRecords, snoozes, cycleAccounts, repeatAccounts] = await Promise.all([
       env.DB.prepare(
       `
         SELECT
@@ -41,11 +43,17 @@ export default {
             subscriptions.endpoint,
             subscriptions.p256dh,
             subscriptions.auth,
-            subscriptions.timezone
+            subscriptions.timezone,
+            subscriptions.user_id
           FROM reminder_push_rules rules
           INNER JOIN salary_push_subscriptions subscriptions
             ON subscriptions.installation_id = rules.installation_id
           WHERE rules.enabled = 1 AND subscriptions.enabled = 1
+            AND (subscriptions.user_id = '' OR EXISTS (
+              SELECT 1 FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r
+              WHERE a.user_id = subscriptions.user_id AND json_extract(r.value, '$.id') = rules.reminder_id
+                AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0
+                AND json_extract(r.value, '$.repeat') IS NULL))
         `
       ).all(),
       env.DB.prepare(`
@@ -58,10 +66,11 @@ export default {
       `).all(),
       env.DB.prepare(`SELECT * FROM reminder_snoozes WHERE active=1 AND next_at<=?
         AND (mode='once' OR until_at>?)`).bind(new Date().toISOString(), new Date().toISOString()).all(),
-      env.DB.prepare(`${CYCLE_ACCOUNT_SELECT} WHERE json_extract(snapshot_data,'$.preferences.cycle.pushEnabled')=1`).all()
+      env.DB.prepare(`${CYCLE_ACCOUNT_SELECT} WHERE json_extract(snapshot_data,'$.preferences.cycle.pushEnabled')=1`).all(),
+      env.DB.prepare(`${REPEAT_ACCOUNT_SELECT} WHERE ${REPEAT_ACCOUNT_FILTER}`).all()
     ]);
 
-    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length && !cycleAccounts?.results?.length) {
+    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length && !cycleAccounts?.results?.length && !repeatAccounts?.results?.length) {
       return;
     }
 
@@ -73,7 +82,8 @@ export default {
       ...(reminderRecords.results || []).map((entry) => processReminderEntry(entry, env)),
       ...(dailyRecords.results || []).map((entry) => processDailyCountdownEntry(entry, env)),
       ...(snoozes.results || []).map((entry) => processSnoozeEntry(entry, env)),
-      ...(cycleAccounts.results || []).map((entry) => processCycleAccount(entry, env))
+      ...(cycleAccounts.results || []).map((entry) => processCycleAccount(entry, env)),
+      ...(repeatAccounts.results || []).map((entry) => processRepeatAccount(entry, env))
     ];
     ctx.waitUntil(Promise.all(jobs));
   }
@@ -230,6 +240,14 @@ export async function processSalaryEntry(entry, env, now = new Date()) {
 }
 
 export async function processReminderEntry(entry, env) {
+  // A queued or legacy-device job cannot resurrect a deleted/completed series.
+  if (entry.user_id) {
+    const current = await env.DB.prepare(`SELECT 1 AS found FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r
+      WHERE a.user_id = ? AND json_extract(r.value, '$.id') = ?
+        AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0 AND json_extract(r.value, '$.repeat') IS NULL`)
+      .bind(entry.user_id, entry.reminder_id).first();
+    if (!current) return;
+  }
   const now = new Date();
   const local = getLocalParts(now, entry.timezone || FIXED_TIMEZONE);
   if (local.hour !== Number(entry.reminder_hour ?? 9)) {

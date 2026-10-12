@@ -42,7 +42,10 @@ test('authenticated API preserves old-client categories and rejects stale revisi
     if(sql.includes('AND revision'))assert.equal(args[1],3);
     return {snapshot_data:JSON.stringify({preferences:{customCategories:['运动']}}),revision:4};
    },
-   async run(){if(sql.includes('UPDATE reminder_snoozes'))return {meta:{changes:0}};assert.equal(args[2],'account-a');assert.equal(args[3],3);written=JSON.parse(args[0]);return {meta:{changes:conflict?0:1}};}
+   async run(){
+    if(sql.includes('UPDATE reminder_snoozes'))return {meta:{changes:0}};
+    if(sql.includes('DELETE FROM reminder_push_rules')){assert.deepEqual(args,['account-a','account-a']);return {meta:{changes:0}};}
+    assert.ok(sql.includes('UPDATE account_sync'));assert.equal(args[2],'account-a');assert.equal(args[3],3);written=JSON.parse(args[0]);return {meta:{changes:conflict?0:1}};}
   };}};}};
   const request=new Request('https://example.test/api/account/sync',{method:'PUT',headers:{cookie:`yoyuan_session=${'a'.repeat(43)}`},body:JSON.stringify({baseRevision:3,snapshot:{preferences:{nickname:'旧设备'}}})});
   const response=await onRequestPut({request,env:{DB}});

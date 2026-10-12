@@ -15,6 +15,7 @@ export async function processSnoozeEntry(rule, env, now = new Date()) {
         WHERE s.user_id=? AND s.reminder_id=? AND s.token=? AND s.active=1
           AND (s.mode='once' OR s.until_at>?)
           AND json_extract(r.value,'$.id')=s.reminder_id AND COALESCE(json_extract(r.value,'$.completed'),0)=0
+          AND (json_extract(r.value,'$.repeat') IS NULL OR json_extract(r.value,'$.repeat.status')='active')
       ) AND EXISTS (SELECT 1 FROM salary_push_subscriptions WHERE installation_id=? AND user_id=? AND enabled=1 AND permission='granted')
     `).bind(rule.token, device.installation_id, occurrence, now.toISOString(), rule.user_id,
       rule.reminder_id, rule.token, now.toISOString(), device.installation_id, rule.user_id).run();
@@ -26,6 +27,7 @@ export async function processSnoozeEntry(rule, env, now = new Date()) {
       WHERE s.user_id=? AND s.reminder_id=? AND s.token=? AND s.active=1
         AND (s.mode='once' OR s.until_at>?) AND d.installation_id=? AND d.enabled=1 AND d.permission='granted'
         AND json_extract(r.value,'$.id')=s.reminder_id AND COALESCE(json_extract(r.value,'$.completed'),0)=0
+          AND (json_extract(r.value,'$.repeat') IS NULL OR json_extract(r.value,'$.repeat.status')='active')
     `).bind(rule.user_id, rule.reminder_id, rule.token, now.toISOString(), device.installation_id).first();
     if (!live) continue;
     try {

@@ -1,3 +1,5 @@
+import { repeatSummary, beijingDate } from "../utils/repeat.js";
+import { repeatStatusLabel } from "./repeat.js";
 import { isWeatherFresh } from "../utils/lifestyle.js";
 import { renderMoon, renderOutfit } from "./lifestyle.js";
 import { isReminderDue } from "../utils/snooze.js";
@@ -167,8 +169,8 @@ export function renderDashboard(state, refs) {
   }
 
   if (refs.reminderSummaryValue && refs.reminderSummaryMeta) {
-    const pending = state.reminders.filter((entry) => !entry.completed);
-    const upcoming = pending.filter((entry) => getDaysUntil(entry.date) >= 0);
+    const pending = state.reminders.filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active"));
+    const upcoming = pending.filter((entry) => reminderDaysUntil(entry) >= 0);
     refs.reminderSummaryValue.textContent = String(pending.length);
     refs.reminderSummaryMeta.textContent = pending.length
       ? upcoming.length
@@ -593,6 +595,7 @@ export function renderReminderBoard(state, refs) {
   }
 
   refs.filters.forEach((button) => {
+    if (button.dataset.filter === REMINDER_FILTERS.completed) button.textContent = sorted.some(entry => entry.repeatOutcome === 'skipped') ? '已完成/跳过' : '已完成';
     button.classList.toggle("is-active", button.dataset.filter === state.preferences.reminderFilter);
   });
 
@@ -608,7 +611,7 @@ export function renderReminderBoard(state, refs) {
 
   const groups = new Map();
   for (const entry of filtered) {
-    const days = getDaysUntil(entry.date);
+    const days = reminderDaysUntil(entry);
     const label = days < 0 ? '过去' : days === 0 ? '今天' : days === 1 ? '明天' : '之后';
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(entry);
@@ -618,7 +621,7 @@ export function renderReminderBoard(state, refs) {
 }
 
 export function renderOverviewReminderPreview(state, refs) {
-  const pending = getSortedReminders(state.reminders.filter((entry) => !entry.completed));
+  const pending = getSortedReminders(state.reminders.filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active")));
   const preview = pending.slice(0, 3);
   refs.overviewReminderCount.textContent = `${pending.length} 条`;
   refs.overviewReminderCount.hidden = pending.length === 0;
@@ -628,28 +631,31 @@ export function renderOverviewReminderPreview(state, refs) {
 }
 
 function renderReminderItem(entry, { preview = false } = {}) {
-  const days = getDaysUntil(entry.date);
+  const days = reminderDaysUntil(entry);
   const due = isReminderDue(entry);
-  const tone = entry.completed ? "completed" : due ? "due" : getReminderTone(days);
-  const schedule = entry.completed
+  const inactive = entry.repeat && entry.repeat.status !== 'active';
+  const historical = entry.repeat && ['history','ended'].includes(entry.repeat.status);
+  const tone = entry.completed || inactive ? "completed" : due ? "due" : getReminderTone(days);
+  const schedule = entry.repeatOutcome === 'skipped' ? `${formatDateWithWeekday(entry.date)} · 本次已跳过`
+    : inactive && !entry.completed ? `${formatDateWithWeekday(entry.date)} · ${repeatStatusLabel(entry)}` : entry.completed
     ? (entry.occurredOn ? `实际发生于 ${formatDateWithWeekday(entry.occurredOn)}` : "已完成 · 实际发生日期未确认")
     : days < 0
       ? `${formatDateWithWeekday(entry.date)} · 已逾期`
       : days === 0
         ? `${formatDateWithWeekday(entry.date)} · 今天`
         : formatDateWithWeekday(entry.date);
-  const notification = entry.completed
+  const notification = inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
     ? "已完成，不再推送"
     : entry.notificationEnabled
-      ? `推送 ${entry.leadDays ? `提前 ${entry.leadDays} 天 · ` : "当天 · "}${formatHour(entry.hour)}`
+      ? `推送 ${entry.leadDays ? `提前 ${entry.leadDays} 天 · ` : "当天 · "}${entry.repeat ? `${entry.repeat.time} 北京时间` : formatHour(entry.hour)}`
       : "仅记录，不推送";
-  const completionAction = entry.completed
+  const completionAction = entry.repeat && (entry.completed || inactive) ? "" : entry.completed
     ? `<button class="reminder-complete-button is-completed" data-action="restore" data-id="${escapeHtml(entry.id)}" type="button" aria-label="恢复事项 ${escapeHtml(entry.title)}">${getRestoreIcon()}</button>`
     : `<button class="reminder-complete-button" data-action="complete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="标记事项 ${escapeHtml(entry.title)} 为已完成">${getCompleteIcon()}</button>`;
   const deleteAction = `<button class="reminder-delete-button" data-action="delete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="删除事项 ${escapeHtml(entry.title)}">${getDeleteIcon()}</button>`;
   const itemActions = preview
     ? `<button class="button button--link" data-action="detail" data-id="${escapeHtml(entry.id)}" type="button">查看</button>`
-    : `<button class="button button--link" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">编辑</button><button class="button button--link" data-action="export" data-id="${escapeHtml(entry.id)}" type="button">导出</button>`;
+    : `${historical ? "" : `<button class="button button--link" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">编辑</button>`}<button class="button button--link" data-action="export" data-id="${escapeHtml(entry.id)}" type="button">导出</button>`;
 
   return `
     <article class="reminder-item reminder-item--${tone}" data-reminder-detail="${escapeHtml(entry.id)}">
@@ -658,15 +664,17 @@ function renderReminderItem(entry, { preview = false } = {}) {
         <div class="reminder-item__title-row">
           <span class="badge">${escapeHtml(entry.category)}</span>
           <h3 class="reminder-item__title" title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</h3>
+          ${entry.repeat ? `<span class="repeat-badge">↻ 循环</span>` : ""}
         </div>
         <p class="reminder-item__meta">${due ? '<strong class="reminder-due-label">到点未完成 · </strong>' : ""}${escapeHtml(schedule)}</p>
         <p class="reminder-item__notification">${escapeHtml(notification)}</p>
-        ${entry.completed ? `<button class="button button--link" data-action="occurrence" data-id="${escapeHtml(entry.id)}" type="button">${entry.occurredOn ? "修改发生日期" : "补填发生日期"}</button>` : ""}
+        ${entry.repeat ? `<p class="reminder-item__repeat">${escapeHtml(repeatSummary(entry.repeat))}</p>` : ""}
+        ${entry.completed && !entry.repeat ? `<button class="button button--link" data-action="occurrence" data-id="${escapeHtml(entry.id)}" type="button">${entry.occurredOn ? "修改发生日期" : "补填发生日期"}</button>` : ""}
         ${entry.notes ? `<p class="reminder-item__notes">${escapeHtml(entry.notes)}</p>` : ""}
       </div>
       <div class="reminder-item__side">
         ${preview ? "" : `<div class="reminder-primary-actions">${completionAction}${deleteAction}</div>`}
-        <strong class="countdown">${escapeHtml(entry.completed ? "已完成" : formatCountdown(days))}</strong>
+        <strong class="countdown">${escapeHtml(inactive ? repeatStatusLabel(entry) : entry.completed ? "已完成" : formatCountdown(days))}</strong>
         <div class="reminder-item__actions">${itemActions}</div>
       </div>
     </article>
@@ -675,6 +683,15 @@ function renderReminderItem(entry, { preview = false } = {}) {
 
 function formatHour(hour) {
   return `${String(Number(hour) || 0).padStart(2, "0")}:00`;
+}
+
+export function reminderDaysUntil(entry, now = new Date()) {
+  return entry.repeat ? Math.round((Date.parse(`${entry.date}T00:00:00Z`) - Date.parse(`${beijingDate(now)}T00:00:00Z`)) / 86400000) : getDaysUntil(entry.date, now);
+}
+function reminderMinutes(entry) {
+  if (!entry.repeat) return Number(entry.hour) * 60;
+  const [hour, minute] = entry.repeat.time.split(':').map(Number);
+  return hour * 60 + minute;
 }
 
 function getSortedReminders(reminders) {
@@ -686,13 +703,13 @@ function getSortedReminders(reminders) {
       return String(right.completedAt || "").localeCompare(String(left.completedAt || ""));
     }
     const dueOrder = Number(isReminderDue(right)) - Number(isReminderDue(left));
-    return dueOrder || left.date.localeCompare(right.date) || Number(left.hour) - Number(right.hour);
+    return dueOrder || left.date.localeCompare(right.date) || reminderMinutes(left) - reminderMinutes(right);
   });
 }
 
 export function applyFilter(reminders, filter) {
   if (filter === REMINDER_FILTERS.overdue) {
-    return reminders.filter((entry) => !entry.completed && getDaysUntil(entry.date) < 0);
+    return reminders.filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active") && reminderDaysUntil(entry) < 0);
   }
 
   if (filter === REMINDER_FILTERS.completed) {

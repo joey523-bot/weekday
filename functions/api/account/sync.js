@@ -1,3 +1,4 @@
+import { validateRepeatSnapshot } from "../../_utils/repeat-sync.js";
 import { preserveMissingOccurrences } from "../../_utils/occurrence-sync.js";
 import { preserveMissingCategories } from "../../_utils/category-sync.js";
 import { badRequest, json } from "../../_utils/http.js";
@@ -25,10 +26,12 @@ export async function onRequestPut(context) {
   if (!Number.isInteger(revision) || revision < 1 || !isSnapshot(body?.snapshot)) return badRequest("同步数据无效");
   try {
     let snapshot = body.snapshot;
+    const stored = await context.env.DB.prepare("SELECT snapshot_data FROM account_sync WHERE user_id = ? AND revision = ?")
+      .bind(result.session.user_id, revision).first();
+    const previous = stored ? parseSnapshot(stored.snapshot_data) : null;
+    try { snapshot = validateRepeatSnapshot(snapshot, previous); }
+    catch (error) { return badRequest(error.message, error.status || 400); }
     if (!Object.hasOwn(snapshot.preferences?.cycle || {}, 'pushEnabled') || !Object.hasOwn(snapshot.preferences || {}, 'cycle') || !Object.hasOwn(snapshot.preferences || {}, 'customCategories') || snapshot.reminders?.some(item => !Object.hasOwn(item, 'occurredOn'))) {
-      const stored = await context.env.DB.prepare("SELECT snapshot_data FROM account_sync WHERE user_id = ? AND revision = ?")
-        .bind(result.session.user_id, revision).first();
-      const previous = stored ? parseSnapshot(stored.snapshot_data) : null;
       if (!Object.hasOwn(snapshot.preferences || {}, 'cycle')) snapshot = { ...snapshot, preferences: {
         ...snapshot.preferences, cycle: previous?.preferences?.cycle || {} } };
       if (!Object.hasOwn(snapshot.preferences?.cycle || {}, 'pushEnabled') && Object.hasOwn(previous?.preferences?.cycle || {}, 'pushEnabled')) {
@@ -47,7 +50,14 @@ export async function onRequestPut(context) {
           SELECT 1 FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r
           WHERE a.user_id = reminder_snoozes.user_id AND json_extract(r.value, '$.id') = reminder_snoozes.reminder_id
             AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0
-        )`).bind(now, result.session.user_id)
+            AND (json_extract(r.value, '$.repeat') IS NULL OR json_extract(r.value, '$.repeat.status') = 'active')
+        )`).bind(now, result.session.user_id),
+      context.env.DB.prepare(`DELETE FROM reminder_push_rules WHERE installation_id IN (
+        SELECT installation_id FROM salary_push_subscriptions WHERE user_id = ?
+      ) AND reminder_id IN (SELECT json_extract(r.value, '$.id')
+        FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r
+        WHERE a.user_id = ? AND json_extract(r.value, '$.repeat') IS NOT NULL)`)
+        .bind(result.session.user_id, result.session.user_id)
     ]);
     const write = writes[0];
     if (!write.meta.changes) {

@@ -1,3 +1,5 @@
+import { bindRepeatSettings, repeatStatusLabel } from "./views/repeat.js";
+import { repeatSummary } from "./utils/repeat.js";
 import { setupLifestyle, renderLifestyle } from "./views/lifestyle.js";
 import { bindCycleUI } from "./views/cycle.js";
 import { cycleSuggestions } from "./utils/cycle.js";
@@ -7,6 +9,7 @@ import { categoryOptions, DEFAULT_CATEGORIES } from "./utils/reminder-categories
 import { APP_META, APP_THEMES, DEFAULT_THEME, REMINDER_FILTERS } from "./config.js";
 import {
   addReminder,
+  manageRepeat,
   updateCyclePreferences,
   addReminderCategory,
   addCustomTheme,
@@ -76,6 +79,8 @@ let suggestionHistory = [];
 const reminderTimeDefault = createReminderTimeDefault();
 let activeView = "overview";
 let editingReminderId = null;
+let editingRepeatScope = "once";
+let repeatUI = null;
 let cycleUI = null;
 let cycleDraft = null;
 let accountSyncTimer = null;
@@ -261,6 +266,7 @@ function bindAuthEvents(root) {
 
 function bindEvents(refs) {
   const root = document.querySelector("#app");
+  repeatUI = bindRepeatSettings(root, refs, () => syncReminderDateDisplay(refs));
 
   const panel = root.querySelector('#newCategoryPanel');
   const categoryName = root.querySelector('#newCategoryInput');
@@ -296,7 +302,7 @@ function bindEvents(refs) {
   suggestionUI = bindReminderSuggestions(refs.reminderTitleInput, root.querySelector("#reminderSuggestions"), () => suggestionHistory);
   syncReminderDateDisplay(refs);
   const onReminderDateChange = () => {
-    reminderTimeDefault.apply(refs, editingReminderId !== null);
+    if (!repeatUI?.isRepeating()) reminderTimeDefault.apply(refs, editingReminderId !== null);
     syncReminderDateDisplay(refs);
   };
   refs.reminderDateInput.addEventListener("input", onReminderDateChange);
@@ -433,6 +439,9 @@ function bindEvents(refs) {
   refs.reminderForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const wantsNotification = refs.reminderNotificationInput.checked;
+    let repeat;
+    try { repeat = repeatUI.get(); }
+    catch(error) { refs.reminderSaveState.textContent = error.message; return; }
     const payload = {
       title: refs.reminderTitleInput.value.trim(),
       date: refs.reminderDateInput.value,
@@ -440,12 +449,14 @@ function bindEvents(refs) {
       leadDays: Number(refs.reminderLeadDaysInput.value) || 0,
       hour: Number(refs.reminderHourSelect.value) || 0,
       notificationEnabled: wantsNotification,
-      notes: refs.reminderNotesInput.value.trim()
+      notes: refs.reminderNotesInput.value.trim(),
+      repeat
     };
     const isEditing = Boolean(editingReminderId);
 
     if (isEditing) {
-      updateReminder(editingReminderId, payload);
+      try { updateReminder(editingReminderId, payload, editingRepeatScope); }
+      catch(error) { refs.reminderSaveState.textContent = `保存失败：${error.message}`; return; }
     } else {
       if (cycleDraft) {
         const fresh = cycleSuggestions(getState().reminders, getState().preferences.cycle).find(item => item.id === cycleDraft.id);
@@ -577,7 +588,8 @@ function bindEvents(refs) {
     }
 
     if (action === "delete") {
-      if (!window.confirm(`确定删除“${reminder.title}”吗？此操作无法恢复。`)) {
+      const warning = reminder.repeat && reminder.repeat.status !== 'history' ? `确定删除“${reminder.title}”并停止整个循环吗？历史期次保留，此操作无法恢复。` : `确定删除“${reminder.title}”吗？此操作无法恢复。`;
+      if (!window.confirm(warning)) {
         return;
       }
       deleteReminder(id);
@@ -588,7 +600,7 @@ function bindEvents(refs) {
     }
 
     if (action === "edit") {
-      openReminderEditor(refs, reminder);
+      await openReminderEditor(refs, reminder);
       return;
     }
 
@@ -604,13 +616,13 @@ function bindEvents(refs) {
     if (action === "complete" || action === "restore") {
       const completed = action === "complete";
       if (completed) { if (!await confirmOccurrence(reminder)) return; }
-      else setReminderCompletion(id, false);
+      else { if (reminder.repeat) return; setReminderCompletion(id, false); }
       renderAll(refs);
       try {
         await flushAccountSync();
         await syncExistingPushSubscription(refs);
         refs.reminderBoardState.textContent = completed
-          ? "事项已归档到“已完成”，不会再计为逾期或继续推送。"
+          ? reminder.repeat ? "本次已完成；下一期按循环规则安排，可在待处理列表查看。" : "事项已归档到“已完成”，不会再计为逾期或继续推送。"
           : "事项已恢复到待处理列表。";
       } catch (error) {
         refs.reminderBoardState.textContent = `已保存在本机，尚未同步：${error.message}`;
@@ -624,7 +636,12 @@ function bindEvents(refs) {
   });
 }
 
-function openReminderEditor(refs, reminder) {
+async function openReminderEditor(refs, reminder) {
+  if (reminder.repeat && ['history','ended'].includes(reminder.repeat.status)) return;
+  const scope = reminder.repeat ? await repeatUI.chooseScope() : 'once';
+  if (!scope) return;
+  if (!getState().reminders.some(item => item.id === reminder.id)) return;
+  editingRepeatScope = scope;
   editingReminderId = reminder.id;
   refs.reminderDateNotice.textContent = "";
   refs.reminderTitleInput.value = reminder.title;
@@ -634,9 +651,10 @@ function openReminderEditor(refs, reminder) {
   refs.reminderHourSelect.value = String(reminder.hour);
   refs.reminderNotificationInput.checked = reminder.notificationEnabled;
   refs.reminderNotesInput.value = reminder.notes;
+  repeatUI.set(reminder.repeat, {lock: Boolean(reminder.repeat) && scope === "once"});
   suggestionUI?.refresh();
   refs.reminderFormHeading.textContent = "编辑事项";
-  refs.reminderFormDescription.textContent = "更新日期、提醒或备注后，保存即可生效。";
+  refs.reminderFormDescription.textContent = reminder.repeat ? (scope === "once" ? "仅修改本次；后续仍按原计划，历史保持不变。" : "修改当前未完成项及未来计划，历史保持不变。") : "更新日期、提醒或备注后，保存即可生效。";
   refs.reminderSubmitButton.textContent = "保存修改";
   refs.reminderSaveState.textContent = "";
   syncReminderDateDisplay(refs);
@@ -646,6 +664,8 @@ function openReminderEditor(refs, reminder) {
 function resetReminderForm(refs) {
   cycleDraft = null;
   editingReminderId = null;
+  editingRepeatScope = "once";
+  repeatUI?.set(null);
   reminderTimeDefault.reset();
   refs.reminderDateNotice.textContent = "";
   refs.reminderForm.reset();
@@ -936,21 +956,23 @@ async function flushAccountSync() {
 }
 
 async function confirmOccurrence(reminder) {
+  if (reminder.repeat && reminder.repeat.status !== 'active') return false;
   const accountId = activeAccount?.id;
   const occurredOn = await requestOccurrenceDate(reminder);
   if (!occurredOn) return false;
   const current = getState().reminders.find(item => item.id === reminder.id);
   // Do not apply a stale dialog after a restore, deletion, or account change.
   if (activeAccount?.id !== accountId || !current || current.completed !== reminder.completed || current.completedAt !== reminder.completedAt) return false;
+  if (current.repeat && current.repeat.status !== 'active') return false;
   setReminderCompletion(reminder.id, true, occurredOn);
   return true;
 }
 
 function renderDetailOccurrence(reminder) {
-  document.querySelector("#reminderDetailOccurrence").textContent = reminder.completed
+  document.querySelector("#reminderDetailOccurrence").textContent = reminder.repeatOutcome === "skipped" ? "本次已跳过，不记作完成" : reminder.completed
     ? (reminder.occurredOn ? `实际发生于 ${formatDateLong(reminder.occurredOn)}` : "实际发生日期未确认") : "";
   const edit = document.querySelector("#reminderDetailOccurrenceEdit");
-  edit.hidden = !reminder.completed;
+  edit.hidden = !reminder.completed || Boolean(reminder.repeat);
   edit.textContent = reminder.occurredOn ? "修改实际发生日期" : "补填实际发生日期";
 }
 
@@ -974,10 +996,10 @@ function bindReminderNavigation(refs) {
   window.addEventListener("hashchange", () => openNotificationReminder(refs));
   dialog.addEventListener("close", () => { if (!dialog.open) detailReminderId = null; });
   document.querySelector("#reminderDetailClose").addEventListener("click", () => dialog.close());
-  document.querySelector("#reminderDetailEdit").addEventListener("click", () => {
+  document.querySelector("#reminderDetailEdit").addEventListener("click", async () => {
     const reminder = getState().reminders.find((item) => item.id === detailReminderId);
     dialog.close();
-    if (reminder) openReminderEditor(refs, reminder);
+    if (reminder) await openReminderEditor(refs, reminder);
   });
   document.querySelector("#reminderDetailOccurrenceEdit").addEventListener("click", async () => {
     const reminder = getState().reminders.find(item => item.id === detailReminderId);
@@ -989,31 +1011,57 @@ function bindReminderNavigation(refs) {
   });
   document.querySelector("#reminderDetailComplete").addEventListener("click", async () => {
     const id = detailReminderId;
-    const reminder = getState().reminders.find((item) => item.id === id);
+    const reminder = getState().reminders.find(item => item.id === id);
     if (!reminder) return;
     const button = document.querySelector("#reminderDetailComplete");
     const status = document.querySelector("#reminderDetailState");
-    if (!reminder.completed && !await confirmOccurrence(reminder)) return;
-    button.disabled = true;
-    status.textContent = "正在同步完成状态…";
-    renderDetailOccurrence(getState().reminders.find(item => item.id === id));
-    renderAll(refs);
     try {
+      if (!reminder.completed && !await confirmOccurrence(reminder)) return;
+      button.disabled = true;
+      status.textContent = "正在同步完成状态…";
+      renderAll(refs);
+      const current = getState().reminders.find(item => item.id === id);
+      renderReminderDetailContents(current);
       await flushAccountSync();
       await syncExistingPushSubscription(refs);
       if (detailReminderId !== id) return;
-      showSnoozePanel({ ...reminder, completed: true });
-      document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · 已完成`;
       const pushError = getState().salary.notification.lastError;
-      status.textContent = pushError ? `事项已完成并保存；提醒规则同步失败：${pushError}` : "事项已完成并同步。";
-      button.textContent = pushError ? "重试提醒同步" : "已完成";
-      button.disabled = !pushError;
-    } catch (error) {
+      status.textContent = pushError ? `本次已保存；提醒规则同步失败：${pushError}` : reminder.repeat
+        ? "本次已完成并同步。下一期按循环规则安排，可在待处理列表查看。" : "事项已完成并同步。";
+      if (pushError) {
+        button.textContent = "重试提醒同步"; button.disabled = false;
+      }
+    } catch(error) {
       if (detailReminderId !== id) return;
-      status.textContent = `已在本机标记完成，但尚未同步：${error.message}`;
-      button.textContent = "重试同步";
-      button.disabled = false;
+      status.textContent = `已保存在本机，尚未同步：${error.message}`;
+      button.textContent = "重试同步"; button.disabled = false;
+    } finally {
+      if (detailReminderId === id && !getState().reminders.find(item => item.id === id)?.completed) button.disabled = false;
     }
+  });
+  document.querySelector("#repeatManagement").addEventListener("click", async event => {
+    const button = event.target.closest('[data-repeat-action]');
+    const reminder = getState().reminders.find(item => item.id === detailReminderId);
+    if (!button || button.disabled || !reminder?.repeat) return;
+    const action = button.dataset.repeatAction, id = reminder.id;
+    if (action === 'end' && !window.confirm('结束这个循环？将停止后续安排，已完成和跳过的历史保留。结束后不能恢复。')) return;
+    if (action === 'skip' && !window.confirm(reminder.repeat.mode === 'after' ? '跳过本次？从今天重新计算间隔，不记作完成。' : '跳过本次并接续未来计划？本次不记作完成。')) return;
+    const status = document.querySelector('#reminderDetailState');
+    button.disabled = true;
+    try {
+      if (action !== 'sync') manageRepeat(id, action);
+      renderAll(refs);
+      renderReminderDetailContents(getState().reminders.find(item => item.id === id));
+      status.textContent = '正在同步循环状态…';
+      await flushAccountSync(); await syncExistingPushSubscription(refs);
+      if (detailReminderId !== id) return;
+      const pushError = getState().salary.notification.lastError;
+      status.textContent = pushError ? `循环状态已保存；提醒同步失败：${pushError}` : '循环状态已同步。暂停期间不补发提醒。';
+      document.querySelector('[data-repeat-action="sync"]').hidden = !pushError;
+    } catch(error) {
+      status.textContent = `操作未同步：${error.message}`;
+      document.querySelector('[data-repeat-action="sync"]').hidden = false;
+    } finally { button.disabled = false; }
   });
 }
 
@@ -1086,17 +1134,10 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
       return;
     }
     detailReminderId = id;
-    document.querySelector("#reminderDetailTitle").textContent = reminder.title;
-    document.querySelector("#reminderDetailMeta").textContent = `${formatDateLong(reminder.date)} · ${reminder.category || "事项"} · ${reminder.completed ? "已完成" : "待处理"}`;
-    renderDetailOccurrence(reminder);
-    document.querySelector("#reminderDetailNotes").textContent = reminder.notes || "暂无备注";
-    document.querySelector("#reminderDetailState").textContent = reminder.completed ? "该事项已完成。" : "";
-    const button = document.querySelector("#reminderDetailComplete");
-    button.disabled = Boolean(reminder.completed);
-    button.textContent = reminder.completed ? "已完成" : "完成事项";
+    renderReminderDetailContents(reminder);
+    document.querySelector("#reminderDetailState").textContent = '';
     refs.reminderBoardState.textContent = "";
     dialog.showModal();
-    showSnoozePanel(reminder);
   } catch (error) {
     if (version === routeVersion) {
       setActiveView(refs, "reminders");
@@ -1105,6 +1146,37 @@ async function openReminderDetail(refs, id, { consumeRoute = false } = {}) {
   } finally {
     if (version === routeVersion) routeLoading = false;
   }
+}
+
+function renderReminderDetailContents(reminder) {
+  if (!reminder) return;
+  const rule = reminder.repeat;
+  const inactive = rule && rule.status !== 'active';
+  const historical = rule && ['history','ended'].includes(rule.status);
+  document.querySelector('#reminderDetailTitle').textContent = reminder.title;
+  document.querySelector('#reminderDetailMeta').textContent = `${formatDateLong(reminder.date)} · ${reminder.category || '事项'} · ${rule ? repeatStatusLabel(reminder) : reminder.completed ? '已完成' : '待处理'}`;
+  const summary = document.querySelector('#reminderDetailRepeat');
+  summary.hidden = !rule;
+  summary.textContent = rule ? `↻ 循环 · ${repeatSummary(rule)} · ${rule.time} 北京时间${rule.endDate ? ` · 至${rule.endDate}` : ''}` : '';
+  renderDetailOccurrence(reminder);
+  document.querySelector('#reminderDetailNotes').textContent = reminder.notes || '暂无备注';
+  const complete = document.querySelector('#reminderDetailComplete');
+  complete.disabled = Boolean(reminder.completed || inactive);
+  complete.textContent = reminder.completed ? repeatStatusLabel(reminder) || '已完成' : rule ? '完成本次' : '完成事项';
+  document.querySelector('#reminderDetailEdit').hidden = Boolean(historical);
+  document.querySelector('#repeatManagement').hidden = !rule;
+  document.querySelector('[data-repeat-action="skip"]').hidden = !rule || inactive;
+  document.querySelector('[data-repeat-action="pause"]').hidden = !rule || rule.status !== 'active';
+  document.querySelector('[data-repeat-action="resume"]').hidden = !rule || !['paused','calendar_wait'].includes(rule.status);
+  document.querySelector('[data-repeat-action="end"]').hidden = !rule || historical;
+  document.querySelector('[data-repeat-action="sync"]').hidden = true;
+  document.querySelector('#repeatDetailNote').textContent = !rule ? '' : rule.status === 'calendar_wait'
+    ? '工作日日历待更新，更新后可恢复循环。当前不排期、不发送提醒。' : rule.status === 'history'
+      ? '这是历史期次，不能恢复或重新开启循环。后续计划请在待处理列表查看。' : rule.status === 'ended'
+        ? '循环已结束，历史记录保留。需要继续时请新建事项。' : rule.status === 'paused'
+          ? `暂停期间不推送、不补发。恢复后${rule.mode === 'after' ? '保留本次未完成项。' : '接续下一次未来计划。'}`
+          : '完成或跳过后接续下一期。循环按北京时间安排，同步后生效；到点可能延迟几分钟送达。';
+  showSnoozePanel(inactive ? { ...reminder, completed:true } : reminder);
 }
 
 async function hydratePushSubscription(refs) {

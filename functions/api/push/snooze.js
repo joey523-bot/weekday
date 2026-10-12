@@ -11,7 +11,7 @@ export async function onRequestGet(context) {
       .bind(auth.session.user_id, id).first();
     if (!rule?.active || (rule.mode === 'hourly' && Date.now() >= Date.parse(rule.until_at))) return json({ rule: null });
     const live = await context.env.DB.prepare(`SELECT snapshot_data FROM account_sync WHERE user_id = ?`).bind(auth.session.user_id).first();
-    const reminder = JSON.parse(live?.snapshot_data || '{}').reminders?.find(r => r.id === id && !r.completed);
+    const reminder = JSON.parse(live?.snapshot_data || '{}').reminders?.find(r => r.id === id && !r.completed && (!r.repeat || r.repeat.status === 'active'));
     if (!reminder) return json({ rule: null });
     const delivery = await context.env.DB.prepare(`SELECT status FROM reminder_snooze_deliveries WHERE token = ? LIMIT 1`).bind(rule.token).first();
     return json({ rule: { mode: rule.mode, nextAt: nextSnoozeTime(rule), untilAt: rule.until_at,
@@ -38,7 +38,8 @@ export async function onRequestPost(context) {
       INSERT INTO reminder_snoozes (user_id, reminder_id, token, mode, next_at, until_at, active, updated_at)
       SELECT ?, ?, ?, ?, ?, ?, 1, ?
       WHERE EXISTS (SELECT 1 FROM account_sync a, json_each(a.snapshot_data, '$.reminders') r
-        WHERE a.user_id = ? AND json_extract(r.value, '$.id') = ? AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0)
+        WHERE a.user_id = ? AND json_extract(r.value, '$.id') = ? AND COALESCE(json_extract(r.value, '$.completed'), 0) = 0
+          AND (json_extract(r.value, '$.repeat') IS NULL OR json_extract(r.value, '$.repeat.status') = 'active'))
         AND EXISTS (SELECT 1 FROM salary_push_subscriptions WHERE user_id = ? AND enabled = 1 AND permission = 'granted')
       ON CONFLICT(user_id, reminder_id) DO UPDATE SET token=excluded.token, mode=excluded.mode,
         next_at=excluded.next_at, until_at=excluded.until_at, active=1, updated_at=excluded.updated_at
