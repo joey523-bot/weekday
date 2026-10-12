@@ -134,7 +134,7 @@ export function displayReminder(reminder, { occurrenceDate = '', now = new Date(
   const next = isRunning ? nextFixedOccurrence(reminder, now) : {dueAt:'',occurrence:null};
   const history = occurrenceDate && resolveHistory ? reminders.find(item => item.repeat?.status === 'history'
     && item.repeat.seriesId === reminder.repeat.seriesId && item.repeat.scheduledDate === occurrenceDate) : null;
-  if (history) return { ...history, nextReminderAt: next.dueAt || '' };
+  if (history) return { ...history, nextReminderAt: next.dueAt || '', nextNotificationEnabled: Boolean(next.occurrence?.notificationEnabled) };
   if (!isRunning && !occurrenceDate) return reminder;
   const source = isRunning ? reminder : { ...reminder, repeat:{...reminder.repeat,status:'active'} };
   const occurrence = occurrenceDate ? fixedOccurrenceForDate(source, occurrenceDate) : next.occurrence;
@@ -145,11 +145,11 @@ export function displayReminder(reminder, { occurrenceDate = '', now = new Date(
   const recorded = reminders.find(item => item.repeat?.status === 'history' && item.repeat.seriesId === reminder.repeat.seriesId
     && item.repeat.scheduledDate === occurrence.repeat.scheduledDate);
   return { ...occurrence, repeat:{...occurrence.repeat,status:isRunning ? occurrence.repeat.status : reminder.repeat.status},
-    nextReminderAt: next.dueAt || '', recordedOutcome: recorded?.repeatOutcome || '' };
+    nextReminderAt: next.dueAt || '', nextNotificationEnabled: Boolean(next.occurrence?.notificationEnabled), recordedOutcome: recorded?.repeatOutcome || '' };
 }
 
-export function nextReminderLabel(stamp) {
+export function nextReminderLabel(stamp, enabled = true) {
   if (!stamp) return '';
   const value = new Date(new Date(stamp).getTime() + 8 * 3600000).toISOString();
-  return `下次提醒 ${Number(value.slice(5,7))}月${Number(value.slice(8,10))}日 ${value.slice(11,16)} 北京时间`;
+  return `${enabled ? '下次提醒' : '下次计划'} ${Number(value.slice(5,7))}月${Number(value.slice(8,10))}日 ${value.slice(11,16)} 北京时间`;
 }

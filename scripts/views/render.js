@@ -644,7 +644,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
       : days === 0
         ? `${formatDateWithWeekday(entry.date)} · 今天`
         : formatDateWithWeekday(entry.date);
-  const notification = entry.nextReminderAt ? `${nextReminderLabel(entry.nextReminderAt)}${entry.notificationEnabled ? '' : ' · 仅记录，不推送'}` : inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
+  const notification = entry.nextReminderAt ? `${nextReminderLabel(entry.nextReminderAt, entry.nextNotificationEnabled)}${entry.nextNotificationEnabled ? '' : ' · 仅记录，不推送'}` : inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
     ? "已完成，不再推送"
     : entry.notificationEnabled
       ? `推送 ${entry.leadDays ? `提前 ${entry.leadDays} 天 · ` : "当天 · "}${entry.repeat ? `${entry.repeat.time} 北京时间` : formatHour(entry.hour)}`

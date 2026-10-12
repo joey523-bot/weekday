@@ -143,13 +143,16 @@ try {
   const history=api.snapshot().reminders.find(item=>item.repeat?.status==='history');
   assert.equal(history.occurredOn,'2026-10-13');assert.equal(history.repeat.scheduledDate,'2026-10-13');assert.equal(api.snapshot().reminders.find(item=>item.id==='r1').repeat.status,'active');
   const next=api.snapshot().reminders.find(item=>item.repeat && !item.completed);
-  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月13日 09:15 北京时间');
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次计划 10月13日 09:15 北京时间');
+  await page.click('#reminderDetailClose');assert.match(await card.innerText(),/下次计划.*仅记录，不推送/);
  },{timezoneId:'America/Los_Angeles',fixedNow:'2026-10-12T16:30:00Z'});
  await scenario('fixed reminders advance automatically on the same screen and preserve notification occurrence',async(page,api)=>{
-  fixture(api,{time:'16:27',template:{title:'循环测试',category:'其他',notes:'固定自动提醒',leadDays:0,notificationEnabled:false,time:'16:27'}});
+  fixture(api,{time:'16:27',template:{title:'循环测试',category:'其他',notes:'固定自动提醒',leadDays:0,notificationEnabled:true,time:'16:27'}});
   await board(page);
   const card=page.locator('#reminderList [data-reminder-detail="r1"]');
   assert.match(await card.innerText(),/下次提醒 10月12日 16:27 北京时间/);
+  const pinnedOff=await page.evaluate(async()=>{const {displayReminder,nextReminderLabel}=await import('/scripts/views/repeat.js');const {getState}=await import('/scripts/state.js');const raw=getState().reminders.find(item=>item.id==='r1');const displayed=displayReminder(raw,{occurrenceDate:'2026-10-03'});return {current:displayed.notificationEnabled,next:displayed.nextNotificationEnabled,label:nextReminderLabel(displayed.nextReminderAt,displayed.nextNotificationEnabled)};});
+  assert.equal(pinnedOff.current,false);assert.equal(pinnedOff.next,true);assert.equal(pinnedOff.label,'下次提醒 10月12日 16:27 北京时间');
   await card.locator('.reminder-item__body').click();await page.locator('#reminderDetail[open]').waitFor();
   assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月12日 16:27 北京时间');
   const end=page.locator('[data-repeat-action="end"]');assert.equal(await end.evaluate(el=>el.classList.contains('button--secondary')),true);
@@ -185,9 +188,9 @@ try {
   assert.match(await page.locator('#occurrenceTitle').innerText(),/2026年10月12日/);
   await page.clock.fastForward(2*3600000);await page.click('#occurrenceSubmit');await page.locator('#reminderDetailState').filter({hasText:'本次已完成并同步'}).waitFor();
   const history=api.snapshot().reminders.find(item=>item.repeat?.status==='history');assert.equal(history.repeat.scheduledDate,'2026-10-12');assert.equal(history.title,'只改12日');
-  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次提醒 10月13日 16:27 北京时间');
-  const actualLead=await page.evaluate(async()=>{const {displayReminder,nextReminderLabel}=await import('/scripts/views/repeat.js');const {getState}=await import('/scripts/state.js');const raw=getState().reminders.find(item=>item.id==='r1');const copy={...raw,repeat:{...raw.repeat,overrides:{},template:{...raw.repeat.template,leadDays:1}}};return nextReminderLabel(displayReminder(copy).nextReminderAt);});
-  assert.equal(actualLead,'下次提醒 10月13日 16:27 北京时间');
+  assert.equal(await page.locator('#reminderDetailNext').innerText(),'下次计划 10月13日 16:27 北京时间');
+  const actualLead=await page.evaluate(async()=>{const {displayReminder,nextReminderLabel}=await import('/scripts/views/repeat.js');const {getState}=await import('/scripts/state.js');const raw=getState().reminders.find(item=>item.id==='r1');const copy={...raw,repeat:{...raw.repeat,overrides:{},template:{...raw.repeat.template,leadDays:1}}};const display=displayReminder(copy);return nextReminderLabel(display.nextReminderAt,display.nextNotificationEnabled);});
+  assert.equal(actualLead,'下次计划 10月13日 16:27 北京时间');
  },{fixedNow:'2026-10-12T08:26:00Z',advancingClock:true});
  await scenario('completed future slot keeps active-series edit and delete targets separate from history',async(page,api)=>{
   fixture(api,{time:'16:27',template:{title:'循环测试',category:'其他',notes:'固定自动提醒',leadDays:0,notificationEnabled:false,time:'16:27'}});

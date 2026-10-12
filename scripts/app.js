@@ -1201,7 +1201,7 @@ function renderReminderDetailContents(rawReminder) {
   summary.textContent = rule ? `↻ 循环 · ${repeatSummary(rule)} · ${rule.time} 北京时间${rule.endDate ? ` · 至${rule.endDate}` : ''}` : '';
   const next = document.querySelector('#reminderDetailNext');
   next.hidden = !reminder.nextReminderAt;
-  next.textContent = nextReminderLabel(reminder.nextReminderAt);
+  next.textContent = nextReminderLabel(reminder.nextReminderAt, reminder.nextNotificationEnabled);
   renderDetailOccurrence(reminder);
   if (reminder.recordedOutcome) document.querySelector('#reminderDetailOccurrence').textContent = '本次已记录完成，提醒仍按原计划进行。';
   document.querySelector('#reminderDetailNotes').textContent = reminder.notes || '暂无备注';
@@ -1220,7 +1220,7 @@ function renderReminderDetailContents(rawReminder) {
       ? '这是历史期次，不能恢复或重新开启循环。后续计划请在待处理列表查看。' : rule.status === 'ended'
         ? '循环已结束，历史记录保留。需要继续时请新建事项。' : rule.status === 'paused'
           ? `暂停期间不推送、不补发。恢复后${rule.mode === 'after' ? '保留本次未完成项。' : '接续下一次未来计划。'}`
-          : rule.mode === 'fixed' ? '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次提醒是计划时间，不代表已发送；推送可能延迟几分钟。'
+          : rule.mode === 'fixed' ? reminder.nextNotificationEnabled ? '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次提醒是计划时间，不代表已发送；推送可能延迟几分钟。' : '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次计划仅记录，不推送。'
             : '完成或跳过后接续下一期。循环按北京时间安排，同步后生效；到点可能延迟几分钟送达。';
   const snoozeKey = `${reminder.id}:${detailOccurrenceDate}:${rule?.status || ''}:${reminder.completed}:${reminder.recordedOutcome || ''}`;
   if (snoozeKey !== detailSnoozeKey) {
