@@ -47,7 +47,7 @@ function fixture(t) {
       VALUES (?,?,'key','auth',?,'granted','now','now')`).run(`${user}device`, `https://example.test/${user}`, user);
   }
   const env = { DB, APP_URL: 'https://example.test' }, sent = [];
-  t.mock.method(webpush, 'sendNotification', async (device, payload) => sent.push({ endpoint: device.endpoint, ...JSON.parse(payload) }));
+  t.mock.method(webpush, 'sendNotification', async (device, payload, options) => sent.push({ endpoint: device.endpoint, ...JSON.parse(payload), options }));
   const record = (user = 'owner') => DB.prepare(`${REPEAT_ACCOUNT_SELECT} WHERE user_id=?`).bind(user).first();
   const current = () => JSON.parse(sql.prepare("SELECT snapshot_data FROM account_sync WHERE user_id='owner'").get().snapshot_data);
   const update = patch => { const data = current(); patch(data); sql.prepare("UPDATE account_sync SET snapshot_data=?,revision=revision+1 WHERE user_id='owner'").run(JSON.stringify(data)); };
@@ -155,6 +155,38 @@ test('database delay across the final minute stops the later device before send 
   assert.equal(f.sent[0].endpoint, 'https://example.test/owner');
   assert.deepEqual(f.sql.prepare('SELECT installation_id, scheduled_date, status FROM recurring_reminder_deliveries').all()
     .map(row => ({ ...row })), [{ installation_id: 'ownerdevice', scheduled_date: '2026-10-12T21:00', status: 'sent' }]);
+});
+
+test('the installed web-push library retains an explicit zero TTL without making a request', () => {
+  const request = webpush.generateRequestDetails({ endpoint: 'https://example.test/subscription' }, undefined,
+    { TTL: 0, vapidDetails: null });
+  assert.equal(request.headers.TTL, 0);
+});
+
+test('intraday queue TTL ends at the final minute while early and legacy single-point pushes retain 300 seconds', async t => {
+  for (const { stamp, expectedTTL, single = false } of [
+    { stamp: '2026-10-12T21:00:30', expectedTTL: 30 },
+    { stamp: '2026-10-12T21:00:59.999', expectedTTL: 0 },
+    { stamp: '2026-10-12T08:00:30', expectedTTL: 300 },
+    { stamp: '2026-10-12T21:00:30', expectedTTL: 300, single: true }
+  ]) {
+    const f = fixture(t);
+    if (single) f.update(data => {
+      const rule = data.reminders[0].repeat;
+      rule.version = 2; rule.times = []; rule.time = rule.template.time = '21:00';
+    });
+    await processRepeatAccount(await f.record(), f.env, at(stamp), () => 0);
+    assert.equal(f.sent.length, 1, stamp);
+    assert.equal(f.sent[0].options.TTL, expectedTTL, `${stamp}, single=${single}`);
+  }
+});
+
+test('queue TTL and live eligibility use the same advanced send clock after database work', async t => {
+  const f = fixture(t), ticks = [0, 10000];
+  await processRepeatAccount(await f.record(), f.env, at('2026-10-12T21:00:20'), () => ticks.shift() ?? 10000);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.sent[0].options.TTL, 30);
+  assert.deepEqual(ticks, []);
 });
 
 test('completed days still notify; day-level skip and notification override exclude every slot of that day', async t => {

@@ -27,7 +27,8 @@ export async function processRepeatAccount(record, env, now = new Date(), clock 
         WHERE installation_id = ? AND user_id = ? AND enabled = 1 AND permission = 'granted'`)
         .bind(device.installation_id, record.user_id).first()
     ]);
-    const live = repeatPushCandidates(account, currentTime()).find(item => sameRepeatOccurrence(item, candidate));
+    const sendTime = currentTime();
+    const live = repeatPushCandidates(account, sendTime).find(item => sameRepeatOccurrence(item, candidate));
     if (!live || !currentDevice) {
       // No send happened: a later valid edit/resume may claim this occurrence.
       await removeClaim(env, key);
@@ -41,7 +42,7 @@ export async function processRepeatAccount(record, env, now = new Date(), clock 
         tag: `repeat-${live.repeat.seriesId}-${slotKey}`,
         reminderId: live.id,
         url: `${(env.APP_URL || '/').split('#')[0]}#reminder=${encodeURIComponent(live.id)}&occurrence=${encodeURIComponent(live.repeat.scheduledDate)}${live.repeat.times?.length ? `&slot=${encodeURIComponent(live.repeat.scheduledTime)}` : ''}`
-      }), { TTL: 300 });
+      }), { TTL: deliveryTTL(live, sendTime) });
       await setStatus(env, key, "sent");
     } catch (error) {
       if ([404, 410].includes(error?.statusCode)) {
@@ -55,6 +56,15 @@ export async function processRepeatAccount(record, env, now = new Date(), clock 
       await setStatus(env, key, "failed-or-unknown");
     }
   }
+}
+
+function deliveryTTL(candidate, now) {
+  const rule = candidate.repeat;
+  if (!rule.times?.length) return 300;
+  const cutoff = Date.parse(`${rule.scheduledDate}T${rule.times.at(-1)}:00+08:00`) + 60000;
+  // TTL 0 asks the provider for immediate delivery without retaining the push.
+  // This bounds queue retention; the device's eventual display is outside our control.
+  return Math.min(300, Math.max(0, Math.floor((cutoff - now.getTime()) / 1000)));
 }
 
 function removeClaim(env, key) {
