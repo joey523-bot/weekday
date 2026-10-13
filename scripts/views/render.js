@@ -1,5 +1,5 @@
 import { repeatSummary, beijingDate } from "../utils/repeat.js";
-import { repeatStatusLabel, displayReminder, nextReminderLabel, isRepeatInactive } from "./repeat.js";
+import { repeatStatusLabel, displayReminder, nextReminderLabel, isRepeatInactive, hasMultipleTimes } from "./repeat.js";
 import { isWeatherFresh } from "../utils/lifestyle.js";
 import { renderMoon, renderOutfit } from "./lifestyle.js";
 import { isReminderDue } from "../utils/snooze.js";
@@ -642,8 +642,9 @@ function renderReminderItem(entry, { preview = false } = {}) {
   const due = isReminderDue(entry);
   const inactive = entry.repeat && entry.repeat.status !== 'active';
   const historical = entry.repeat && ['history','ended'].includes(entry.repeat.status);
+  const multiple = hasMultipleTimes(entry.repeat);
   const tone = entry.completed || inactive ? "completed" : due ? "due" : getReminderTone(days);
-  const schedule = entry.repeatOutcome === 'skipped' ? `${formatDateWithWeekday(entry.date)} · 本次已跳过`
+  const schedule = entry.repeatOutcome === 'skipped' ? `${formatDateWithWeekday(entry.date)} · ${multiple ? '当天已跳过' : '本次已跳过'}`
     : inactive && !entry.completed ? `${formatDateWithWeekday(entry.date)} · ${repeatStatusLabel(entry)}` : entry.completed
     ? (entry.occurredOn ? `实际发生于 ${formatDateWithWeekday(entry.occurredOn)}` : "已完成 · 实际发生日期未确认")
     : days < 0
@@ -651,21 +652,21 @@ function renderReminderItem(entry, { preview = false } = {}) {
       : days === 0
         ? `${formatDateWithWeekday(entry.date)} · 今天`
         : formatDateWithWeekday(entry.date);
-  const notification = entry.nextReminderAt ? `${nextReminderLabel(entry.nextReminderAt, entry.nextNotificationEnabled)}${entry.nextNotificationEnabled ? '' : ' · 仅记录，不推送'}` : inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
+  const notification = entry.nextReminderAt ? `${nextReminderLabel(entry.nextReminderAt, entry.nextNotificationEnabled)}${entry.nextNotificationEnabled ? '' : ' · 仅记录，不推送'}` : multiple && entry.repeat.status === 'history' ? entry.repeatOutcome === 'skipped' ? '当天全部提醒已取消' : '当天完成记录；提醒安排请查看当前循环' : inactive ? `${repeatStatusLabel(entry)}，不再推送` : entry.completed
     ? "已完成，不再推送"
     : entry.notificationEnabled
       ? `推送 ${entry.leadDays ? `提前 ${entry.leadDays} 天 · ` : "当天 · "}${entry.repeat ? `${entry.repeat.time} 北京时间` : formatHour(entry.hour)}`
       : "仅记录，不推送";
   const completionAction = entry.repeat && (entry.completed || inactive || entry.recordedOutcome) ? "" : entry.completed
     ? `<button class="reminder-complete-button is-completed" data-action="restore" data-id="${escapeHtml(entry.id)}" type="button" aria-label="恢复事项 ${escapeHtml(entry.title)}">${getRestoreIcon()}</button>`
-    : `<button class="reminder-complete-button" data-action="complete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="标记事项 ${escapeHtml(entry.title)} 为已完成">${getCompleteIcon()}</button>`;
+    : `<button class="reminder-complete-button" data-action="complete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="${multiple ? '完成当天事项' : '标记事项'} ${escapeHtml(entry.title)}${multiple ? '' : ' 为已完成'}">${getCompleteIcon()}</button>`;
   const deleteAction = `<button class="reminder-delete-button" data-action="delete" data-id="${escapeHtml(entry.id)}" type="button" aria-label="删除事项 ${escapeHtml(entry.title)}">${getDeleteIcon()}</button>`;
   const itemActions = preview
     ? `<button class="button button--link" data-action="detail" data-id="${escapeHtml(entry.id)}" type="button">查看</button>`
     : `${historical ? "" : `<button class="button button--link" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">编辑</button>`}<button class="button button--link" data-action="export" data-id="${escapeHtml(entry.id)}" type="button">导出</button>`;
 
   return `
-    <article class="reminder-item reminder-item--${tone}" data-reminder-detail="${escapeHtml(entry.id)}" data-occurrence="${escapeHtml(entry.repeat?.scheduledDate || '')}">
+    <article class="reminder-item reminder-item--${tone}" data-reminder-detail="${escapeHtml(entry.id)}" data-occurrence="${escapeHtml(entry.repeat?.scheduledDate || '')}" data-slot="${escapeHtml(multiple ? entry.repeat.time : '')}">
       <div class="reminder-item__icon" aria-hidden="true">${getCategoryIcon(entry.category)}</div>
       <div class="reminder-item__body" role="button" tabindex="0" aria-label="查看事项 ${escapeHtml(entry.title)}">
         <div class="reminder-item__title-row">
@@ -675,7 +676,7 @@ function renderReminderItem(entry, { preview = false } = {}) {
         </div>
         <p class="reminder-item__meta">${due ? '<strong class="reminder-due-label">到点未完成 · </strong>' : ""}${escapeHtml(schedule)}</p>
         <p class="reminder-item__notification">${escapeHtml(notification)}</p>
-        ${entry.repeat ? `<p class="reminder-item__repeat">${escapeHtml(repeatSummary(entry.repeat))}${entry.recordedOutcome ? " · 本次已记录" : ""}</p>` : ""}
+        ${entry.repeat ? `<p class="reminder-item__repeat">${escapeHtml(repeatSummary(entry.repeat))}${entry.recordedOutcome ? multiple ? " · 当天已记录" : " · 本次已记录" : ""}</p>` : ""}
         ${entry.completed && !entry.repeat ? `<button class="button button--link" data-action="occurrence" data-id="${escapeHtml(entry.id)}" type="button">${entry.occurredOn ? "修改发生日期" : "补填发生日期"}</button>` : ""}
         ${entry.notes ? `<p class="reminder-item__notes">${escapeHtml(entry.notes)}</p>` : ""}
       </div>

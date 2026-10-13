@@ -61,6 +61,9 @@ export function updateReminder(id, payload, scope = "once", { occurrenceDate = "
   if (current.repeat?.status === "history") throw new Error("循环历史不能修改，请编辑当前事项");
   const hasRepeat = Object.hasOwn(payload, "repeat");
   const requestedRule = hasRepeat ? normalizeRepeat(payload.repeat) : current.repeat;
+  if (current.repeat && scope === "once" && !current.repeat.times?.length && requestedRule?.times?.length) {
+    throw new Error("增加每天多次提醒请编辑整个系列");
+  }
   const inactive = isReminderInactive(current, now);
   if (inactive && scope !== "series") throw new Error("已停用事项请编辑整个系列");
   if (inactive && !requestedRule) {
@@ -90,11 +93,12 @@ export function updateReminder(id, payload, scope = "once", { occurrenceDate = "
     }
     if (!requestedRule) return normalizeReminder({ ...merged, repeat: null, repeatOutcome: "" });
     const rule = normalizeRepeat({ ...entry.repeat, ...requestedRule,
+      version: Math.max(2, entry.repeat.version, requestedRule.version),
       seriesId: entry.repeat.seriesId, status: entry.repeat.status });
     const template = reminderTemplate({ ...merged, repeat: rule });
     rule.template = template;
     if (rule.mode === "fixed") {
-      rule.version = 2;
+      rule.version = Math.max(2, rule.version);
       rule.overrides = {};
       rule.skippedDates = [];
       rule.resumeAfter = now.toISOString();
@@ -261,6 +265,21 @@ function updateFixedReminder(current, payload, requestedRule, scope, occurrenceD
   if (scope === "once") {
     const target = fixedTarget(active, occurrenceDate, now);
     const date = Object.hasOwn(payload, "date") ? payload.date : target.date;
+    if (previous.times?.length) {
+      const changedRule = Object.hasOwn(payload, "repeat") && (!requestedRule
+        || ["freq", "mode", "interval", "unit", "workday", "startDate", "endDate"].some(key => requestedRule[key] !== previous[key])
+        || JSON.stringify(requestedRule.weekdays) !== JSON.stringify(previous.weekdays)
+        || JSON.stringify(requestedRule.times) !== JSON.stringify(previous.times)
+        || !previous.times.includes(requestedRule.time));
+      if (date !== target.date || Number(payload.leadDays ?? 0) !== 0 || changedRule) {
+        throw new Error("仅当天可修改内容和通知开关；调整日期或提醒时段请编辑整个系列");
+      }
+      const values = reminderTemplate({ ...target, ...payload, repeat: target.repeat });
+      const override = Object.fromEntries(["title", "category", "notes", "notificationEnabled"].map(key => [key, values[key]]));
+      return normalizeReminder({ ...entry, repeat: { ...previous,
+        overrides: { ...previous.overrides, [target.repeat.scheduledDate]: override } } });
+    }
+    if (requestedRule?.times?.length) throw new Error("增加每天多次提醒请编辑整个系列");
     if (!validRepeatDate(date)) throw new Error("请选择有效日期");
     const time = Object.hasOwn(payload, "repeat") ? requestedRule?.time || target.repeat.time : target.repeat.time;
     const override = { ...reminderTemplate({ ...target, ...payload, repeat: { ...target.repeat, time } }), date, time };
@@ -270,14 +289,19 @@ function updateFixedReminder(current, payload, requestedRule, scope, occurrenceD
   const projected = nextFixedOccurrence(active, now).occurrence;
   const from = occurrenceDate || projected?.repeat.scheduledDate || beijingDate(now);
   if (!validRepeatDate(from)) throw new Error("期次日期无效");
-  const rule = normalizeRepeat({ ...previous, ...(Object.hasOwn(payload, "repeat") ? requestedRule : previous), version: 2,
-    seriesId: previous.seriesId, status: previous.status,
-    overrides: Object.fromEntries(Object.entries(previous.overrides).filter(([date]) => date < from)),
+  const nextRule = Object.hasOwn(payload, "repeat") ? requestedRule : previous;
+  const overrides = Object.fromEntries(Object.entries(previous.overrides).filter(([date]) => date < from)
+    .map(([date, patch]) => [date, nextRule.times?.length
+      ? Object.fromEntries(Object.entries(patch).filter(([key]) => ["title", "category", "notes", "notificationEnabled"].includes(key))) : patch]));
+  const rule = normalizeRepeat({ ...previous, ...nextRule, version: Math.max(2, previous.version, nextRule.version),
+    ...(nextRule.times?.length ? { time: nextRule.times[0] } : {}),
+    seriesId: previous.seriesId, status: previous.status, overrides,
     skippedDates: previous.skippedDates, resumeAfter: previous.resumeAfter });
   rule.template = reminderTemplate({ ...entry, ...previous.template, ...payload, repeat: rule });
   const scheduleChanged = ["freq", "mode", "interval", "unit", "workday", "startDate", "endDate"]
     .some(key => rule[key] !== previous[key])
     || JSON.stringify(rule.weekdays) !== JSON.stringify(previous.weekdays)
+    || JSON.stringify(rule.times || []) !== JSON.stringify(previous.times || [])
     || ["time", "leadDays", "notificationEnabled"].some(key => rule.template[key] !== previous.template[key]);
   if (scheduleChanged) rule.resumeAfter = now.toISOString();
   // Keep the raw date only as a compatibility anchor; the next visible date is projected.
@@ -355,8 +379,9 @@ function prepareNewReminder(payload, now = new Date()) {
   if (!rule) return normalizeReminder(payload);
   if (payload.completed) throw new Error("已完成事项不能改成循环，请新建循环事项");
   const first = firstRepeatDate(rule);
+  if (rule.times?.length) rule.time = rule.times[0];
   rule.seriesId = crypto.randomUUID();
-  rule.version = 2;
+  rule.version = Math.max(2, rule.version);
   rule.overrides = {};
   rule.skippedDates = [];
   rule.resumeAfter = rule.mode === "fixed" ? now.toISOString() : "";
@@ -507,7 +532,7 @@ export function setNickname(nickname) {
 export function getSyncSnapshot() {
   return {
     version: 1,
-    capabilities: { repeat: 2 },
+    capabilities: { repeat: 3 },
     salary: {
       day: state.salary.day,
       amount: state.salary.amount,
@@ -589,6 +614,9 @@ function normalizeTheme(theme) {
 
 function normalizeReminder(entry) {
   const repeat = normalizeRepeat(entry?.repeat);
+  if (repeat?.times?.length && Number(entry?.leadDays || 0) !== 0) {
+    throw new Error("每天多次提醒仅支持当天提醒，请将提前天数设为0");
+  }
   const occurredOnValid = repeat ? validRepeatDate(entry?.occurredOn) && entry.occurredOn <= beijingDate() : isOccurrenceDate(entry?.occurredOn);
   return {
     id: String(entry?.id || crypto.randomUUID()),

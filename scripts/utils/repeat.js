@@ -13,6 +13,8 @@ const parts = value => { const [year, month, day] = value.split('-').map(Number)
 
 export function normalizeRepeat(value) {
   if (!value || value.freq === 'none') return null;
+  const version = value.version ?? 1;
+  if (![1, 2, 3].includes(version)) throw new Error('重复规则版本不受支持，请更新应用');
   if (!['day', 'week', 'month', 'year', 'weekday', 'custom'].includes(value.freq)) throw new Error('请选择有效的重复周期');
   if (!validRepeatDate(value.startDate)) throw new Error('请选择循环开始日期');
   if (value.endDate && (!validRepeatDate(value.endDate) || value.endDate < value.startDate)) throw new Error('结束日期不能早于开始日期');
@@ -21,6 +23,14 @@ export function normalizeRepeat(value) {
   const unit = value.unit || 'day';
   if (!['day', 'week', 'month'].includes(unit)) throw new Error('请选择天、周或月');
   const mode = value.freq === 'custom' && value.mode === 'after' ? 'after' : 'fixed';
+  if (value.times !== undefined && !Array.isArray(value.times)) throw new Error('每日提醒时点格式无效');
+  const times = [...new Set(value.times || [])].sort();
+  if (times.length) {
+    if (version !== 3) throw new Error('每日多时点需要新版重复规则');
+    if (mode === 'after' || value.mode === 'after') throw new Error('完成后间隔不能设置每日多时点');
+    if (times.length < 2 || times.length > 24 || times.some(time => typeof time !== 'string' || !/^([01]\d|2[0-3]):00$/.test(time))) throw new Error('请选择2—24个连续整点');
+    if (times.some((time, index) => index > 0 && Number(time.slice(0, 2)) !== Number(times[index - 1].slice(0, 2)) + 1)) throw new Error('每日提醒时点必须为同一天的连续整点');
+  }
   const weekdays = [...new Set(value.weekdays || [new Date(dateNumber(value.startDate)).getUTCDay() || 7])].map(Number).sort((a, b) => a - b);
   if (weekdays.some(day => !Number.isInteger(day) || day < 1 || day > 7) || ((value.freq === 'week' || (value.freq === 'custom' && unit === 'week' && mode === 'fixed')) && !weekdays.length)) throw new Error('请至少选择一个有效星期');
   const time = value.time || '09:00';
@@ -28,6 +38,7 @@ export function normalizeRepeat(value) {
   const status = value.status || 'active';
   if (!['active', 'paused', 'ended', 'calendar_wait', 'history'].includes(status)) throw new Error('循环状态无效');
   if (value.scheduledDate && !validRepeatDate(value.scheduledDate)) throw new Error('期次日期无效');
+  if (value.scheduledTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value.scheduledTime)) throw new Error('期次时点无效');
   if (value.waitingAfterDate && !validRepeatDate(value.waitingAfterDate)) throw new Error('待排期锚点无效');
   const rawTemplate = value.template && typeof value.template === 'object' && !Array.isArray(value.template) ? value.template : {};
   const template = {};
@@ -51,16 +62,24 @@ export function normalizeRepeat(value) {
     if (Object.hasOwn(raw,'time')) { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw.time)) throw new Error('本次修改的时间无效'); patch.time = raw.time; }
     if (Object.hasOwn(raw,'leadDays')) { const lead = Number(raw.leadDays); if (!Number.isInteger(lead) || lead < 0 || lead > 365) throw new Error('提前提醒天数无效'); patch.leadDays = lead; }
     if (Object.hasOwn(raw,'notificationEnabled')) patch.notificationEnabled = raw.notificationEnabled === true;
+    if (times.length && ((patch.date && patch.date !== day) || (patch.time && !times.includes(patch.time)))) throw new Error('每日多时点不能单独移动日期或时点');
+    if (times.length && Number(patch.leadDays || 0) !== 0) throw new Error('每日多时点仅支持当天提醒');
     overrides[day] = patch;
   }
+  if (times.length && Number(template.leadDays || 0) !== 0) throw new Error('每日多时点仅支持当天提醒');
   const skippedDates = [...new Set(value.skippedDates || [])];
   if (skippedDates.some(day => !validRepeatDate(day))) throw new Error('跳过的期次无效');
   const resumeAfter = value.resumeAfter || '';
   if (resumeAfter && !Number.isFinite(Date.parse(resumeAfter))) throw new Error('恢复时间无效');
-  return { version: value.version === 2 ? 2 : 1, seriesId: typeof value.seriesId === 'string' ? value.seriesId : '', freq: value.freq,
+  return { version, seriesId: typeof value.seriesId === 'string' ? value.seriesId : '', freq: value.freq,
     mode, interval, unit, weekdays, workday: value.workday === 'weekdays' ? 'weekdays' : 'actual',
-    startDate: value.startDate, endDate: value.endDate || '', time, status,
-    scheduledDate: value.scheduledDate || '', waitingAfterDate: value.waitingAfterDate || '', template, overrides, skippedDates, resumeAfter };
+    startDate: value.startDate, endDate: value.endDate || '', time, times, status,
+    scheduledDate: value.scheduledDate || '', scheduledTime: value.scheduledTime || '', waitingAfterDate: value.waitingAfterDate || '', template, overrides, skippedDates, resumeAfter };
+}
+
+export function repeatTimes(value) {
+  const rule = normalizeRepeat(value);
+  return rule ? (rule.times.length ? [...rule.times] : [rule.time]) : [];
 }
 
 function resolved(rule, date) {
@@ -145,7 +164,7 @@ export function repeatDueAt(item) {
     const rule = normalizeRepeat(item.repeat);
     if (!validRepeatDate(item.date)) return '';
     const lead = Number(item.leadDays || 0);
-    if (!Number.isInteger(lead) || lead < 0 || lead > 365) return '';
+    if (!Number.isInteger(lead) || lead < 0 || lead > 365 || (rule.times.length && (lead !== 0 || !rule.times.includes(rule.time)))) return '';
     return new Date(Date.parse(`${item.date}T${rule.time}:00+08:00`) - lead * DAY).toISOString();
   } catch { return ''; }
 }
@@ -174,20 +193,29 @@ function effectiveOverrides(item, rule) {
   }
   return overrides;
 }
-function deriveFixed(item, rule, scheduledDate, overrides) {
+function deriveFixed(item, rule, scheduledDate, overrides, scheduledTime = '') {
   if (!validRepeatDate(scheduledDate) || rule.skippedDates.includes(scheduledDate)) return null;
   const result = scan(rule, scheduledDate, true);
   // Even a saved v1 date or an explicit exception must be backed by a real slot.
   if (result.status !== 'active' || result.date !== scheduledDate) return null;
-  const values = { ...fixedValues(item, rule), date: scheduledDate, ...overrides[scheduledDate] };
+  const base = fixedValues(item, rule);
+  const plannedTime = scheduledTime || (rule.times.length ? rule.times[0] : base.time);
+  if (rule.times.length ? !rule.times.includes(plannedTime) : plannedTime !== base.time) return null;
+  const values = { ...base, date: scheduledDate, ...overrides[scheduledDate] };
+  if (rule.times.length) {
+    if (Number(item.leadDays || 0) !== 0 || Number(values.leadDays || 0) !== 0) return null;
+    // A day-level override may change content, never one slot's original date/time.
+    values.date = scheduledDate;
+    values.time = plannedTime;
+  }
   const dueAt = occurrenceTime(values.date, values.time, values.leadDays);
   if (!dueAt) return null;
   return { ...item, ...values, hour: Number(values.time.slice(0,2)),
-    repeat: { ...rule, status: 'active', scheduledDate, time: values.time }, dueAt };
+    repeat: { ...rule, status: 'active', scheduledDate, scheduledTime: plannedTime, time: values.time }, dueAt };
 }
-export function fixedOccurrenceForDate(item, scheduledDate) {
+export function fixedOccurrenceForDate(item, scheduledDate, scheduledTime = '') {
   const rule = fixedRule(item);
-  return rule ? deriveFixed(item, rule, scheduledDate, effectiveOverrides(item, rule)) : null;
+  return rule ? deriveFixed(item, rule, scheduledDate, effectiveOverrides(item, rule), scheduledTime) : null;
 }
 function afterResume(rule, dueAt) {
   return !rule.resumeAfter || Date.parse(dueAt) > Date.parse(rule.resumeAfter);
@@ -196,6 +224,7 @@ export function fixedDueOccurrences(item, now = new Date()) {
   const rule = fixedRule(item);
   if (!rule || !Number.isFinite(now.getTime())) return [];
   const overrides = effectiveOverrides(item,rule), base = fixedValues(item,rule);
+  if (rule.times.length) return intradayDueOccurrences(item, rule, overrides, now);
   const lead = Number(base.leadDays || 0);
   if (!Number.isInteger(lead) || lead < 0 || lead > 365) return [];
   const from = now.getTime() - 3600000, to = now.getTime();
@@ -216,6 +245,7 @@ export function nextFixedOccurrence(item, now = new Date()) {
   const rule = fixedRule(item);
   if (!rule || !Number.isFinite(now.getTime())) return { status:'ended', occurrence:null, dueAt:'' };
   const overrides = effectiveOverrides(item,rule), base = fixedValues(item,rule);
+  if (rule.times.length) return nextIntradayOccurrence(item, rule, overrides, now);
   const lead = Number(base.leadDays || 0);
   if (!Number.isInteger(lead) || lead < 0 || lead > 365) return { status:'ended', occurrence:null, dueAt:'' };
   const threshold = Math.max(now.getTime(), rule.resumeAfter ? Date.parse(rule.resumeAfter) : -Infinity);
@@ -244,6 +274,41 @@ export function nextFixedOccurrence(item, now = new Date()) {
   return occurrence ? { status:'active', occurrence, dueAt:occurrence.dueAt } : { status:slot.status, occurrence:null, dueAt:'' };
 }
 
+function validIntradayLead(item, rule) {
+  return Number(item.leadDays || 0) === 0 && Number(fixedValues(item, rule).leadDays || 0) === 0;
+}
+function intradayDueOccurrences(item, rule, overrides, now) {
+  if (!validIntradayLead(item, rule)) return [];
+  const day = beijingDate(now);
+  const first = Date.parse(occurrenceTime(day, rule.times[0], 0));
+  const last = Date.parse(occurrenceTime(day, rule.times.at(-1), 0));
+  const to = now.getTime();
+  // Catch up only within today's configured window. The final minute is allowed,
+  // but the next minute, a later day, and off-calendar days never replay that slot.
+  if (to < first || to >= last + 60000) return [];
+  const from = to - 3600000;
+  return rule.times.flatMap(time => {
+    const occurrence = deriveFixed(item, rule, day, overrides, time);
+    const due = Date.parse(occurrence?.dueAt);
+    return occurrence && due > from && due <= to && afterResume(rule, occurrence.dueAt) ? [occurrence] : [];
+  });
+}
+function nextIntradayOccurrence(item, rule, overrides, now) {
+  if (!validIntradayLead(item, rule)) return { status: 'ended', occurrence: null, dueAt: '' };
+  const threshold = Math.max(now.getTime(), rule.resumeAfter ? Date.parse(rule.resumeAfter) : -Infinity);
+  let slot = scan(rule, beijingDate(new Date(threshold)), true);
+  while (slot.status === 'active') {
+    for (const time of rule.times) {
+      const occurrence = deriveFixed(item, rule, slot.date, overrides, time);
+      if (occurrence && Date.parse(occurrence.dueAt) > threshold) {
+        return { status: 'active', occurrence, dueAt: occurrence.dueAt };
+      }
+    }
+    slot = scan(rule, slot.date);
+  }
+  return { status: slot.status, occurrence: null, dueAt: '' };
+}
+
 export function repeatSummary(value) {
   if (!value) return '不重复';
   const r = normalizeRepeat(value);
@@ -252,5 +317,6 @@ export function repeatSummary(value) {
   const names = { day: '每天', week: `每周${weekdays}`, month: '每月', year: '每年', weekday: r.workday === 'actual' ? '法定工作日（含调休）' : '周一至周五' };
   const unit = { day: '天', week: '周', month: '月' };
   const frequency = r.freq === 'custom' ? `每${r.interval}${unit[r.unit]}${r.unit === 'week' && r.mode === 'fixed' ? ` · 周${weekdays}` : ''}` : names[r.freq];
-  return `${frequency} · ${r.mode === 'after' ? '完成后计算' : '固定周期'}`;
+  const intraday = r.times.length ? ` · ${r.times[0]}—${r.times.at(-1)} · 每天${r.times.length}次` : '';
+  return `${frequency} · ${r.mode === 'after' ? '完成后计算' : '固定周期'}${intraday}`;
 }

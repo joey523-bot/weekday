@@ -23,14 +23,14 @@ const live = s => s.getState().reminders.filter(item => item.repeat?.status !== 
 const history = s => s.getState().reminders.filter(item => item.repeat?.status === 'history');
 const next = (s, at = now) => nextFixedOccurrence(live(s)[0], at).occurrence;
 
-test('new fixed series uses version 2 and snapshot capability, validates and survives reload', async () => {
+test('new fixed series uses version 2 and snapshot capability 3, validates and survives reload', async () => {
   const s = await setup();
   const added = s.addReminder(payload({ freq: 'week', weekdays: [1] }));
   assert.equal(added.date, '2026-10-12');
   assert.equal(added.repeat.template.time, '09:30');
   assert.equal(added.repeat.version, 2);
   assert.ok(added.repeat.seriesId);
-  assert.deepEqual(s.getSyncSnapshot().capabilities, { repeat: 2 });
+  assert.deepEqual(s.getSyncSnapshot().capabilities, { repeat: 3 });
   assert.deepEqual((await s.reload()).getState().reminders, s.getState().reminders);
   assert.throws(() => s.addReminder(payload({ startDate: '2026-02-30' })), /开始日期/);
   assert.equal(s.getState().reminders.length, 1);

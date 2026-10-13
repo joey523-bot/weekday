@@ -228,6 +228,7 @@ export function createShell() {
                   </label>
                   <label id="reminderRepeatTimeField" class="field" hidden><span class="field__label">时间（北京时间）</span><input id="reminderRepeatTime" class="input" type="time" step="60" /></label>
                 </div>
+                <p id="reminderHourlyNote" class="form-note" hidden></p>
                 <p class="timing-hint">“当天”表示在事项日期当天提醒；若定时任务延迟，会在该小时内自动补发一次。</p>
               </fieldset>
               <label class="field">

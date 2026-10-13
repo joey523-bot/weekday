@@ -1,4 +1,4 @@
-import { bindRepeatSettings, repeatStatusLabel, displayReminder, nextReminderLabel, isRepeatInactive } from "./views/repeat.js";
+import { bindRepeatSettings, repeatStatusLabel, displayReminder, nextReminderLabel, isRepeatInactive, hasMultipleTimes } from "./views/repeat.js";
 import { repeatSummary, beijingDate } from "./utils/repeat.js";
 import { setupLifestyle, renderLifestyle } from "./views/lifestyle.js";
 import { bindCycleUI } from "./views/cycle.js";
@@ -95,6 +95,7 @@ let accountChangeVersion = 0;
 let routeVersion = 0;
 let detailReminderId = null;
 let detailOccurrenceDate = "";
+let detailOccurrenceTime = "";
 let detailPinnedOccurrence = false;
 let detailActionBusy = false;
 let detailSnoozeKey = "";
@@ -466,7 +467,7 @@ function bindEvents(refs) {
       title: refs.reminderTitleInput.value.trim(),
       date: refs.reminderDateInput.value,
       category: refs.reminderCategoryInput.value,
-      leadDays: Number(refs.reminderLeadDaysInput.value) || 0,
+      leadDays: hasMultipleTimes(repeat) ? 0 : Number(refs.reminderLeadDaysInput.value) || 0,
       hour: Number(refs.reminderHourSelect.value) || 0,
       notificationEnabled: wantsNotification,
       notes: refs.reminderNotesInput.value.trim(),
@@ -614,7 +615,8 @@ function bindEvents(refs) {
 
     const rawReminder = getState().reminders.find((entry) => entry.id === id);
     const occurrenceDate = actionButton.closest('[data-reminder-detail]')?.dataset.occurrence || '';
-    const reminder = action === 'delete' ? rawReminder : rawReminder ? displayReminder(rawReminder, {occurrenceDate, reminders:getState().reminders, resolveHistory:action !== 'edit'}) : null;
+    const occurrenceTime = actionButton.closest('[data-reminder-detail]')?.dataset.slot || '';
+    const reminder = action === 'delete' ? rawReminder : rawReminder ? displayReminder(rawReminder, {occurrenceDate, occurrenceTime, reminders:getState().reminders, resolveHistory:action !== 'edit'}) : null;
     if (!reminder) {
       return;
     }
@@ -654,7 +656,7 @@ function bindEvents(refs) {
         await flushAccountSync();
         await syncExistingPushSubscription(refs);
         refs.reminderBoardState.textContent = completed
-          ? reminder.repeat ? "本次已完成；下一期按循环规则安排，可在待处理列表查看。" : "事项已归档到“已完成”，不会再计为逾期或继续推送。"
+          ? reminder.repeat ? hasMultipleTimes(reminder.repeat) ? "当天已完成，剩余提醒继续按计划进行。" : "本次已完成；下一期按循环规则安排，可在待处理列表查看。" : "事项已归档到“已完成”，不会再计为逾期或继续推送。"
           : "事项已恢复到待处理列表。";
       } catch (error) {
         refs.reminderBoardState.textContent = `已保存在本机，尚未同步：${error.message}`;
@@ -672,7 +674,7 @@ async function openReminderEditor(refs, reminder) {
   const frozenOccurrence = reminder.repeat?.scheduledDate || '';
   if (reminder.repeat?.status === 'history' || reminder.repeat && reminder.completed) return;
   const inactive = isRepeatInactive(reminder);
-  const scope = inactive ? 'series' : reminder.repeat ? await repeatUI.chooseScope() : 'once';
+  const scope = inactive ? 'series' : reminder.repeat ? await repeatUI.chooseScope(reminder.repeat) : 'once';
   if (!scope) return;
   if (!getState().reminders.some(item => item.id === reminder.id)) return;
   editingRepeatScope = scope;
@@ -689,7 +691,7 @@ async function openReminderEditor(refs, reminder) {
   repeatUI.set(reminder.repeat, {lock: Boolean(reminder.repeat) && scope === "once", inactive});
   suggestionUI?.refresh();
   refs.reminderFormHeading.textContent = "编辑事项";
-  refs.reminderFormDescription.textContent = inactive ? "修改循环设置，历史记录保持不变。保存后仍为停用状态，不会恢复提醒。" : reminder.repeat ? (scope === "once" ? "仅修改本次；后续仍按原计划，历史保持不变。" : "修改当前未完成项及未来计划，历史保持不变。") : "更新日期、提醒或备注后，保存即可生效。";
+  refs.reminderFormDescription.textContent = inactive ? "修改循环设置，历史记录保持不变。保存后仍为停用状态，不会恢复提醒。" : reminder.repeat ? (scope === "once" ? hasMultipleTimes(reminder.repeat) ? "仅修改当天的内容和推送开关；当天时段与后续计划保持不变，历史保持不变。" : "仅修改本次；后续仍按原计划，历史保持不变。" : "修改当前事项及未来计划，历史保持不变。") : "更新日期、提醒或备注后，保存即可生效。";
   refs.reminderSubmitButton.textContent = "保存修改";
   refs.reminderSaveState.textContent = "";
   syncReminderDateDisplay(refs);
@@ -987,7 +989,9 @@ async function confirmOccurrence(reminder) {
   if (reminder.repeat && reminder.repeat.status !== 'active') return false;
   const accountId = activeAccount?.id;
   const requestedDate = requestOccurrenceDate(reminder);
-  if (reminder.repeat) document.querySelector('#occurrenceTitle').textContent = `${reminder.title} · 本次事项日期 ${formatDateLong(reminder.date)} ${reminder.repeat.time}（北京时间）`;
+  if (reminder.repeat) document.querySelector('#occurrenceTitle').textContent = hasMultipleTimes(reminder.repeat)
+    ? `${reminder.title} · 当天事项日期 ${formatDateLong(reminder.date)}（北京时间）。只记录一天的完成历史，剩余提醒继续。`
+    : `${reminder.title} · 本次事项日期 ${formatDateLong(reminder.date)} ${reminder.repeat.time}（北京时间）`;
   const occurredOn = await requestedDate;
   if (!occurredOn) return false;
   const current = getState().reminders.find(item => item.id === reminder.id);
@@ -1006,7 +1010,7 @@ async function confirmOccurrence(reminder) {
 }
 
 function renderDetailOccurrence(reminder) {
-  document.querySelector("#reminderDetailOccurrence").textContent = reminder.repeatOutcome === "skipped" ? "本次已跳过，不记作完成" : reminder.completed
+  document.querySelector("#reminderDetailOccurrence").textContent = reminder.repeatOutcome === "skipped" ? hasMultipleTimes(reminder.repeat) ? "当天已跳过，取消当天全部提醒；原有完成历史保留" : "本次已跳过，不记作完成" : reminder.completed
     ? (reminder.occurredOn ? `实际发生于 ${formatDateLong(reminder.occurredOn)}` : "实际发生日期未确认") : "";
   const edit = document.querySelector("#reminderDetailOccurrenceEdit");
   edit.hidden = !reminder.completed || Boolean(reminder.repeat);
@@ -1078,7 +1082,7 @@ function bindRepeatResume(refs) {
       const result = manageRepeat(target.id,'resume',options);
       saved=true;
       setReminderFilter(REMINDER_FILTERS.all);
-      detailPinnedOccurrence=false; detailOccurrenceDate='';
+      detailPinnedOccurrence=false; detailOccurrenceDate=''; detailOccurrenceTime='';
       renderAll(refs);
       if (detailReminderId===target.id) renderReminderDetailContents(result);
       await flushAccountSync();
@@ -1117,11 +1121,11 @@ function bindReminderNavigation(refs) {
     if (card) openReminderDetail(refs, card.dataset.reminderDetail);
   });
   window.addEventListener("hashchange", () => openNotificationReminder(refs));
-  dialog.addEventListener("close", () => { if (!dialog.open) { detailReminderId = null; detailOccurrenceDate = ""; detailPinnedOccurrence = false; detailSnoozeKey = ""; } });
+  dialog.addEventListener("close", () => { if (!dialog.open) { detailReminderId = null; detailOccurrenceDate = ""; detailOccurrenceTime = ""; detailPinnedOccurrence = false; detailSnoozeKey = ""; } });
   document.querySelector("#reminderDetailClose").addEventListener("click", () => dialog.close());
   document.querySelector("#reminderDetailEdit").addEventListener("click", async () => {
     const raw = getState().reminders.find((item) => item.id === detailReminderId);
-    const reminder = raw ? displayReminder(raw, {occurrenceDate:isRepeatInactive(raw) ? '' : detailOccurrenceDate, reminders:getState().reminders, resolveHistory:detailPinnedOccurrence}) : null;
+    const reminder = raw ? displayReminder(raw, {occurrenceDate:isRepeatInactive(raw) ? '' : detailOccurrenceDate, occurrenceTime:detailOccurrenceTime, reminders:getState().reminders, resolveHistory:detailPinnedOccurrence}) : null;
     dialog.close();
     if (reminder) await openReminderEditor(refs, reminder);
   });
@@ -1138,7 +1142,8 @@ function bindReminderNavigation(refs) {
     const raw = getState().reminders.find(item => item.id === id);
     if (!raw || detailActionBusy) return;
     const frozenDate = detailOccurrenceDate;
-    const reminder = displayReminder(raw, {occurrenceDate:frozenDate, reminders:getState().reminders});
+    const frozenTime = detailOccurrenceTime;
+    const reminder = displayReminder(raw, {occurrenceDate:frozenDate, occurrenceTime:frozenTime, reminders:getState().reminders});
     const button = document.querySelector("#reminderDetailComplete");
     const status = document.querySelector("#reminderDetailState");
     detailActionBusy = true;
@@ -1146,6 +1151,7 @@ function bindReminderNavigation(refs) {
       if (!reminder.completed && !await confirmOccurrence(reminder)) return;
       detailPinnedOccurrence = Boolean(reminder.repeat?.mode === 'fixed');
       detailOccurrenceDate = frozenDate;
+      detailOccurrenceTime = frozenTime;
       button.disabled = true;
       status.textContent = "正在同步完成状态…";
       renderAll(refs);
@@ -1155,7 +1161,7 @@ function bindReminderNavigation(refs) {
       if (detailReminderId !== id) return;
       const pushError = getState().salary.notification.lastError;
       status.textContent = pushError ? `本次已保存；提醒规则同步失败：${pushError}` : reminder.repeat
-        ? reminder.repeat.mode === 'fixed' ? '本次已完成并同步。固定周期继续按计划提醒，完成记录不会改变后续安排。' : '本次已完成并同步。下一期按完成后的间隔安排。'
+        ? hasMultipleTimes(reminder.repeat) ? '当天已完成并同步。当天只记一条完成历史，剩余提醒继续按计划进行。' : reminder.repeat.mode === 'fixed' ? '本次已完成并同步。固定周期继续按计划提醒，完成记录不会改变后续安排。' : '本次已完成并同步。下一期按完成后的间隔安排。'
         : "事项已完成并同步。";
       if (pushError) { button.textContent = "重试提醒同步"; button.disabled = false; }
     } catch(error) {
@@ -1171,7 +1177,7 @@ function bindReminderNavigation(refs) {
     const action = button.dataset.repeatAction, id = reminder.id;
     if (action === 'resume') { openRepeatResume(refs,id); return; }
     if (['pause','end'].includes(action) && !window.confirm('停用这个循环？将移出待处理并停止提醒。内容和历史记录保留，可以在“已停用”中编辑或重新启用。')) return;
-    if (action === 'skip' && !window.confirm(reminder.repeat.mode === 'after' ? '跳过本次？从今天重新计算间隔，不记作完成。' : '跳过本次并接续未来计划？本次不记作完成。')) return;
+    if (action === 'skip' && !window.confirm(hasMultipleTimes(reminder.repeat) ? `跳过${formatDateLong(detailOccurrenceDate)}当天？取消当天全部提醒，原有完成历史保留，后续日期按原计划继续。` : reminder.repeat.mode === 'after' ? '跳过本次？从今天重新计算间隔，不记作完成。' : '跳过本次并接续未来计划？本次不记作完成。')) return;
     const status = document.querySelector('#reminderDetailState');
     const frozenDate = detailOccurrenceDate;
     detailActionBusy = true; button.disabled = true;
@@ -1197,7 +1203,7 @@ async function openNotificationReminder(refs) {
   const params = new URLSearchParams(window.location.hash.slice(1));
   if (params.has("cycle")) return openCycleNotification(refs, params.get("cycle"));
   if (!params.has("reminder")) return;
-  return openReminderDetail(refs, params.get("reminder"), { consumeRoute: true, occurrenceDate:params.get("occurrence") || "" });
+  return openReminderDetail(refs, params.get("reminder"), { consumeRoute: true, occurrenceDate:params.get("occurrence") || "", occurrenceTime:params.get("slot") || "" });
 }
 
 async function openCycleNotification(refs, id) {
@@ -1229,7 +1235,7 @@ async function openCycleNotification(refs, id) {
   } finally { if (version === routeVersion) routeLoading = false; }
 }
 
-async function openReminderDetail(refs, id, { consumeRoute = false, occurrenceDate = "" } = {}) {
+async function openReminderDetail(refs, id, { consumeRoute = false, occurrenceDate = "", occurrenceTime = "" } = {}) {
   const version = ++routeVersion;
   routeLoading = true;
   const dialog = document.querySelector("#reminderDetail");
@@ -1263,6 +1269,7 @@ async function openReminderDetail(refs, id, { consumeRoute = false, occurrenceDa
     }
     detailReminderId = id;
     detailOccurrenceDate = occurrenceDate;
+    detailOccurrenceTime = occurrenceTime;
     detailPinnedOccurrence = Boolean(occurrenceDate);
     detailSnoozeKey = "";
     renderReminderDetailContents(reminder);
@@ -1281,30 +1288,33 @@ async function openReminderDetail(refs, id, { consumeRoute = false, occurrenceDa
 
 function renderReminderDetailContents(rawReminder) {
   if (!rawReminder) return;
-  const reminder = displayReminder(rawReminder, {occurrenceDate:detailPinnedOccurrence ? detailOccurrenceDate : '', reminders:getState().reminders});
+  const reminder = displayReminder(rawReminder, {occurrenceDate:detailPinnedOccurrence ? detailOccurrenceDate : '', occurrenceTime:detailPinnedOccurrence ? detailOccurrenceTime : '', reminders:getState().reminders});
   detailOccurrenceDate = reminder.repeat?.scheduledDate || '';
+  detailOccurrenceTime = reminder.notificationSlot || reminder.repeat?.time || '';
   const rule = reminder.repeat;
+  const multiple = hasMultipleTimes(rule);
   const inactive = rule && rule.status !== 'active';
   const stopped = isRepeatInactive(reminder);
   const historical = rule?.status === 'history';
   document.querySelector('#reminderDetailTitle').textContent = reminder.title;
-  document.querySelector('#reminderDetailMeta').textContent = `${stopped ? '' : `${formatDateLong(reminder.date)} · `}${reminder.category || '事项'} · ${rule ? repeatStatusLabel(reminder) : reminder.completed ? '已完成' : '待处理'}`;
+  document.querySelector('#reminderDetailMeta').textContent = `${stopped ? '' : `${formatDateLong(reminder.date)} · `}${reminder.category || '事项'} · ${rule ? repeatStatusLabel(reminder) : reminder.completed ? '已完成' : '待处理'}${multiple && detailPinnedOccurrence && detailOccurrenceTime ? ` · 本条提醒 ${detailOccurrenceTime} 北京时间` : ''}`;
   const summary = document.querySelector('#reminderDetailRepeat');
   summary.hidden = !rule;
-  summary.textContent = rule ? `↻ 循环 · ${repeatSummary(rule)} · ${rule.time} 北京时间${rule.endDate ? ` · 至${rule.endDate}` : ''}` : '';
+  summary.textContent = rule ? `↻ 循环 · ${repeatSummary(rule)} · ${multiple ? '' : `${rule.time} `}北京时间${rule.endDate ? ` · 至${rule.endDate}` : ''}` : '';
   const next = document.querySelector('#reminderDetailNext');
   next.hidden = !reminder.nextReminderAt;
   next.textContent = nextReminderLabel(reminder.nextReminderAt, reminder.nextNotificationEnabled);
   renderDetailOccurrence(reminder);
-  if (reminder.recordedOutcome) document.querySelector('#reminderDetailOccurrence').textContent = '本次已记录完成，提醒仍按原计划进行。';
+  if (reminder.recordedOutcome) document.querySelector('#reminderDetailOccurrence').textContent = multiple ? '当天已记录完成，剩余提醒继续按计划进行。' : '本次已记录完成，提醒仍按原计划进行。';
   document.querySelector('#reminderDetailNotes').textContent = reminder.notes || '暂无备注';
   const complete = document.querySelector('#reminderDetailComplete');
   complete.hidden = Boolean(stopped);
   complete.disabled = Boolean(reminder.completed || inactive || reminder.recordedOutcome);
-  complete.textContent = reminder.recordedOutcome ? '本次已记录' : reminder.completed ? repeatStatusLabel(reminder) || '已完成' : rule ? '完成本次' : '完成事项';
+  complete.textContent = reminder.recordedOutcome ? multiple ? '当天已记录' : '本次已记录' : reminder.completed ? repeatStatusLabel(reminder) || '已完成' : rule ? multiple ? '完成当天' : '完成本次' : '完成事项';
   document.querySelector('#reminderDetailEdit').hidden = Boolean(historical);
   document.querySelector('#repeatManagement').hidden = !rule;
   document.querySelector('[data-repeat-action="skip"]').hidden = !rule || inactive;
+  document.querySelector('[data-repeat-action="skip"]').textContent = multiple ? '跳过当天' : '跳过本次';
   document.querySelector('[data-repeat-action="pause"]').hidden = !rule || !['active','calendar_wait'].includes(rule.status);
   document.querySelector('[data-repeat-action="resume"]').hidden = !rule || !(stopped || rule.status === 'calendar_wait');
   document.querySelector('[data-repeat-action="end"]').hidden = true;
@@ -1313,9 +1323,9 @@ function renderReminderDetailContents(rawReminder) {
     ? '工作日日历待更新，更新后可恢复循环。当前不排期、不发送提醒。' : rule.status === 'history'
       ? '这是历史期次，不能恢复或重新开启循环。后续计划请在待处理列表查看。' : stopped
         ? '已停止提醒，内容、循环设置和历史记录已保留。可以编辑；保存后仍保持停用，重新启用前会确认下一次安排。'
-          : rule.mode === 'fixed' ? reminder.nextNotificationEnabled ? '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次提醒是计划时间，不代表已发送；推送可能延迟几分钟。' : '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次计划仅记录，不推送。'
+          : multiple ? `同一天仍是一项。完成当天只记一次历史，剩余提醒继续；跳过当天取消当天全部提醒。${reminder.nextNotificationEnabled ? '下次提醒是计划时间，不代表已发送；推送可能延迟几分钟。' : '下次计划仅记录，不推送。'}` : rule.mode === 'fixed' ? reminder.nextNotificationEnabled ? '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次提醒是计划时间，不代表已发送；推送可能延迟几分钟。' : '固定周期无需点完成，到点自动继续。完成只记录历史，跳过只取消所选这一次。下次计划仅记录，不推送。'
             : '完成或跳过后接续下一期。循环按北京时间安排，同步后生效；到点可能延迟几分钟送达。';
-  const snoozeKey = `${reminder.id}:${detailOccurrenceDate}:${rule?.status || ''}:${reminder.completed}:${reminder.recordedOutcome || ''}`;
+  const snoozeKey = `${reminder.id}:${detailOccurrenceDate}:${detailOccurrenceTime}:${rule?.status || ''}:${reminder.completed}:${reminder.recordedOutcome || ''}`;
   if (snoozeKey !== detailSnoozeKey) {
     detailSnoozeKey = snoozeKey;
     showSnoozePanel(inactive || reminder.recordedOutcome ? { ...reminder, completed:true } : reminder);

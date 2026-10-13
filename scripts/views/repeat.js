@@ -1,5 +1,8 @@
 import { normalizeRepeat, repeatSummary, firstRepeatDate, nextRepeatDate, beijingDate, nextFixedOccurrence, fixedOccurrenceForDate } from '../utils/repeat.js';
 
+export const hasMultipleTimes = rule => Array.isArray(rule?.times) && rule.times.length > 1;
+const hourOptions = () => Array.from({length:24}, (_, hour) => `<option value="${hour}">${String(hour).padStart(2,'0')}:00</option>`).join('');
+
 export function repeatDialogs() {
   return `<dialog id="repeatDialog" class="reminder-detail repeat-dialog" aria-labelledby="repeatHeading">
     <button id="repeatClose" class="reminder-detail__close" type="button" aria-label="关闭重复设置">×</button>
@@ -15,7 +18,13 @@ export function repeatDialogs() {
       <fieldset id="repeatWeek" class="repeat-week" hidden><legend>选择星期（可多选）</legend><div>${['一','二','三','四','五','六','日'].map((day,i)=>`<label><input type="checkbox" value="${i+1}" /><span>${day}</span></label>`).join('')}</div></fieldset>
       <label id="repeatWork" class="field" hidden><span class="field__label">工作日口径</span><select id="repeatWorkday" class="select"><option value="actual">法定工作日（含调休）</option><option value="weekdays">周一至周五</option></select></label>
       <div id="repeatDates" class="stack-form" hidden>
-        <div class="split-grid"><label class="field"><span class="field__label">开始日期</span><input id="repeatStart" class="input" type="date" /></label><label class="field"><span class="field__label">提醒时间（北京时间）</span><input id="repeatTime" class="input" type="time" step="60" /></label></div>
+        <label class="field"><span class="field__label">开始日期</span><input id="repeatStart" class="input" type="date" /></label>
+        <label class="field"><span class="field__label">当日提醒</span><select id="repeatDailyPattern" class="select"><option value="once">每天一次</option><option value="hourly">时段内每小时</option></select></label>
+        <label id="repeatSingleTimeField" class="field"><span class="field__label">提醒时间（北京时间）</span><input id="repeatTime" class="input" type="time" step="60" /></label>
+        <div id="repeatHourlyFields" class="stack-form" hidden>
+          <div class="split-grid"><label class="field"><span class="field__label">开始时间</span><select id="repeatHourStart" class="select">${hourOptions()}</select></label><label class="field"><span class="field__label">结束时间</span><select id="repeatHourEnd" class="select">${hourOptions()}</select></label></div>
+          <p id="repeatHourlyPreview" class="form-note" aria-live="polite"></p>
+        </div>
         <label class="field"><span class="field__label">结束条件</span><select id="repeatEndType" class="select"><option value="never">永不结束</option><option value="date">到指定日期结束</option></select></label>
         <label id="repeatEndField" class="field" hidden><span class="field__label">结束日期（含当天）</span><input id="repeatEnd" class="input" type="date" /></label>
       </div>
@@ -26,7 +35,7 @@ export function repeatDialogs() {
   <dialog id="repeatScopeDialog" class="reminder-detail repeat-dialog" aria-labelledby="repeatScopeHeading">
     <button id="repeatScopeClose" class="reminder-detail__close" type="button" aria-label="取消编辑">×</button>
     <div class="stack-form"><h2 id="repeatScopeHeading">编辑循环事项</h2><p class="form-note">选择本次修改的范围，历史记录保持不变。</p>
-      <button type="button" class="button button--secondary" data-repeat-scope="once">仅本次</button><p class="form-note">调整当前事项的日期、时间和内容，后续仍按原规则。</p>
+      <button type="button" class="button button--secondary" data-repeat-scope="once">仅本次</button><p id="repeatScopeOnceNote" class="form-note">调整当前事项的日期、时间和内容，后续仍按原规则。</p>
       <button type="button" class="button button--primary" data-repeat-scope="series">整个系列</button><p class="form-note">从当前未完成项及未来生效，可修改重复规则。</p>
     </div>
   </dialog>
@@ -51,17 +60,27 @@ export function bindRepeatSettings(root, refs, onChange) {
   const dialog = $('repeatDialog');
   const timeInput = $('reminderRepeatTime');
   function showSummary() {
+    const multiple = hasMultipleTimes(current);
     $('reminderRepeatSummary').textContent = repeatSummary(current);
     $('reminderRepeatButton').disabled = locked;
-    $('reminderRepeatScopeNote').textContent = stopped ? '已停用；保存修改后仍保持停用，重新启用后才会安排。' : locked ? '仅修改本次；重复规则与后续计划保持不变。' : current ? '日期由重复规则安排；如需调整，请打开重复设置。固定周期自动接续下次提醒。' : '';
-    refs.reminderDateInput.disabled = Boolean(current && !locked);
+    $('reminderRepeatScopeNote').textContent = stopped ? '已停用；保存修改后仍保持停用，重新启用后才会安排。' : locked ? multiple ? '仅修改当天的内容和推送开关；日期、时段和后续计划保持不变。调整日程请选择整个系列。' : '仅修改本次；重复规则与后续计划保持不变。' : current ? '日期由重复规则安排；如需调整，请打开重复设置。固定周期自动接续下次提醒。' : '';
+    refs.reminderDateInput.disabled = Boolean(current && (!locked || multiple));
+    refs.reminderLeadDaysInput.disabled = multiple;
+    if (multiple) refs.reminderLeadDaysInput.value = '0';
     refs.reminderHourSelect.closest('label').hidden = Boolean(current);
-    $('reminderRepeatTimeField').hidden = !current;
-    timeInput.required = Boolean(current);
-    if (current) timeInput.value = current.time;
+    $('reminderRepeatTimeField').hidden = !current || multiple;
+    timeInput.required = Boolean(current && !multiple);
+    timeInput.disabled = multiple;
+    if (current) timeInput.value = multiple ? current.times[0] : current.time;
+    $('reminderHourlyNote').hidden = !multiple;
+    $('reminderHourlyNote').textContent = multiple ? `${current.times[0]}—${current.times.at(-1)}，共${current.times.length}次，按北京时间每小时提醒。仅在事项当天提醒，不提前。` : '';
   }
   function options() {
     const freq = $('repeatFrequency').value, unit = $('repeatUnit').value, mode = $('repeatMode').value;
+    const after = freq === 'custom' && mode === 'after';
+    if (after) $('repeatDailyPattern').value = 'once';
+    $('repeatDailyPattern').querySelector('option[value="hourly"]').disabled = after;
+    const hourly = !after && $('repeatDailyPattern').value === 'hourly';
     $('repeatFrequency').querySelector('option[value="none"]').disabled = stopped;
     $('repeatCustom').hidden = freq !== 'custom';
     $('repeatWeek').hidden = !(freq === 'week' || freq === 'custom' && unit === 'week' && mode === 'fixed');
@@ -70,16 +89,25 @@ export function bindRepeatSettings(root, refs, onChange) {
     $('repeatEndField').hidden = freq === 'none' || $('repeatEndType').value !== 'date';
     $('repeatInterval').required = freq === 'custom';
     $('repeatInterval').disabled = freq !== 'custom';
-    $('repeatStart').required = $('repeatTime').required = freq !== 'none';
+    $('repeatStart').required = freq !== 'none';
+    $('repeatTime').required = freq !== 'none' && !hourly;
+    $('repeatTime').disabled = hourly;
+    $('repeatSingleTimeField').hidden = hourly;
+    $('repeatHourlyFields').hidden = !hourly;
+    const first = Number($('repeatHourStart').value), last = Number($('repeatHourEnd').value);
+    $('repeatHourlyPreview').textContent = last > first ? `北京时间 ${String(first).padStart(2,'0')}:00—${String(last).padStart(2,'0')}:00，每小时一次，含开始和结束时刻，共${last-first+1}次。仅在事项当天提醒。` : '结束时间须晚于开始时间，不支持跨午夜或仅一个时点。';
     $('repeatEnd').required = !$('repeatEndField').hidden;
     $('repeatModeNote').textContent = stopped ? '当前循环已停用。这里仅保存重复规则，保存后不会自动启用。' : freq === 'none' ? '普通事项只在所选日期提醒。' : freq === 'custom' && mode === 'after'
       ? '从实际完成日计算下一次；跳过从当天计算。未完成时不开始下一轮。'
-      : '固定周期到点自动接续，不需要点完成。完成只记历史；跳过只取消所选这一次，缺少对应日时跳过该期。';
+      : hourly ? '同一天仍是一项。完成当天只记录一次历史，剩余提醒继续；跳过当天取消当天全部提醒。缺少对应日时跳过该期。' : '固定周期到点自动接续，不需要点完成。完成只记历史；跳过只取消所选这一次，缺少对应日时跳过该期。';
   }
   $('reminderRepeatButton').addEventListener('click', () => {
     if (locked) return;
     const r = current || {freq:'none', mode:'fixed', interval:1, unit:'day', weekdays:[new Date(`${refs.reminderDateInput.value || beijingDate()}T00:00:00Z`).getUTCDay() || 7], workday:'actual', startDate:refs.reminderDateInput.value || beijingDate(), time:`${String(refs.reminderHourSelect.value).padStart(2,'0')}:00`};
     for (const [id,key] of [['repeatFrequency','freq'],['repeatMode','mode'],['repeatInterval','interval'],['repeatUnit','unit'],['repeatWorkday','workday'],['repeatStart','startDate'],['repeatTime','time']]) $(id).value = r[key];
+    $('repeatDailyPattern').value = hasMultipleTimes(r) ? 'hourly' : 'once';
+    $('repeatHourStart').value = hasMultipleTimes(r) ? String(Number(r.times[0].slice(0,2))) : '8';
+    $('repeatHourEnd').value = hasMultipleTimes(r) ? String(Number(r.times.at(-1).slice(0,2))) : '21';
     $('repeatEndType').value = r.endDate ? 'date' : 'never'; $('repeatEnd').value = r.endDate || '';
     $('repeatWeek').querySelectorAll('input').forEach(input => input.checked = r.weekdays.includes(Number(input.value)));
     $('repeatError').textContent = ''; options(); dialog.showModal();
@@ -90,10 +118,22 @@ export function bindRepeatSettings(root, refs, onChange) {
     event.preventDefault();
     try {
       const previous = current;
-      const candidate = normalizeRepeat({ ...current, freq:$('repeatFrequency').value, mode:$('repeatMode').value,
+      const freq = $('repeatFrequency').value;
+      const mode = freq === 'custom' ? $('repeatMode').value : 'fixed';
+      const hourly = freq !== 'none' && mode === 'fixed' && $('repeatDailyPattern').value === 'hourly';
+      const first = Number($('repeatHourStart').value), last = Number($('repeatHourEnd').value);
+      if (hourly && last <= first) throw new Error('结束时间须晚于开始时间，不支持跨午夜或仅一个时点。');
+      const times = hourly ? Array.from({length:last-first+1}, (_, i) => `${String(first+i).padStart(2,'0')}:00`) : [];
+      const schedule = hourly ? {
+        template: {...current?.template, leadDays:0, time:times[0]},
+        overrides: Object.fromEntries(Object.entries(current?.overrides || {}).map(([day, patch]) => [day,
+          Object.fromEntries(Object.entries(patch).filter(([key]) => ['title','category','notes','notificationEnabled'].includes(key)))])),
+        scheduledTime:times[0]
+      } : {};
+      const candidate = normalizeRepeat({ ...current, ...schedule, version:hourly ? 3 : current?.version || 2, freq, mode, times,
         interval:Number($('repeatInterval').value), unit:$('repeatUnit').value,
         weekdays:[...$('repeatWeek').querySelectorAll('input:checked')].map(input => Number(input.value)), workday:$('repeatWorkday').value,
-        startDate:$('repeatStart').value, endDate:$('repeatEndType').value === 'date' ? $('repeatEnd').value : '', time:$('repeatTime').value });
+        startDate:$('repeatStart').value, endDate:$('repeatEndType').value === 'date' ? $('repeatEnd').value : '', time:times[0] || $('repeatTime').value });
       if (candidate) {
         const changed = !previous || ['freq','mode','interval','unit','workday','startDate','endDate'].some(key => candidate[key] !== previous[key]) || JSON.stringify(candidate.weekdays) !== JSON.stringify(previous.weekdays);
         if (!candidate.seriesId || changed) {
@@ -125,10 +165,13 @@ export function bindRepeatSettings(root, refs, onChange) {
       locked = stopped ? false : lock;
       showSummary();
     },
-    get() { return current ? normalizeRepeat({...current,time:timeInput.value}) : null; },
+    get() { return current ? normalizeRepeat({...current,time:hasMultipleTimes(current) ? current.times[0] : timeInput.value}) : null; },
     isRepeating() { return Boolean(current); },
-    chooseScope() {
+    chooseScope(rule) {
       const scopeDialog = $('repeatScopeDialog');
+      const multiple = hasMultipleTimes(rule);
+      scopeDialog.querySelector('[data-repeat-scope="once"]').textContent = multiple ? '仅当天' : '仅本次';
+      $('repeatScopeOnceNote').textContent = multiple ? '只修改所选当天的标题、分类、备注和推送开关。日期和提醒时段须通过整个系列修改；已保存的历史保持不变。' : '调整当前事项的日期、时间和内容，后续仍按原规则。';
       return new Promise(resolve => {
         let result = null;
         const click = event => { const button = event.target.closest('[data-repeat-scope]'); if (button) { result = button.dataset.repeatScope; scopeDialog.close(); } };
@@ -149,28 +192,32 @@ export function isRepeatInactive(reminder, now = new Date()) {
 
 export function repeatStatusLabel(reminder) {
   if (!reminder?.repeat) return '';
-  if (reminder.repeat.status === 'history') return reminder.repeatOutcome === 'skipped' ? '本次已跳过' : '本次已完成';
+  if (reminder.repeat.status === 'history') return hasMultipleTimes(reminder.repeat) ? reminder.repeatOutcome === 'skipped' ? '当天已跳过' : '当天已完成' : reminder.repeatOutcome === 'skipped' ? '本次已跳过' : '本次已完成';
   if (isRepeatInactive(reminder)) return '已停用';
   return {active:'进行中',paused:'已停用',ended:'已停用',calendar_wait:'工作日日历待更新'}[reminder.repeat.status] || '';
 }
 
 // Presentation-only projection. Never write a projected cursor or terminal status to state.
-export function displayReminder(reminder, { occurrenceDate = '', now = new Date(), reminders = [], resolveHistory = true } = {}) {
+export function displayReminder(reminder, { occurrenceDate = '', occurrenceTime = '', now = new Date(), reminders = [], resolveHistory = true } = {}) {
   if (!reminder?.repeat || reminder.repeat.mode !== 'fixed' || reminder.repeat.status === 'history') return reminder;
   const isRunning = ['active','calendar_wait'].includes(reminder.repeat.status);
   const next = isRunning ? nextFixedOccurrence(reminder, now) : {dueAt:'',occurrence:null};
-  const history = occurrenceDate && resolveHistory ? reminders.find(item => item.repeat?.status === 'history'
-    && item.repeat.seriesId === reminder.repeat.seriesId && item.repeat.scheduledDate === occurrenceDate) : null;
-  if (history) return { ...history, nextReminderAt: next.dueAt || '', nextNotificationEnabled: Boolean(next.occurrence?.notificationEnabled) };
+  const histories = occurrenceDate && resolveHistory ? reminders.filter(item => item.repeat?.status === 'history'
+    && item.repeat.seriesId === reminder.repeat.seriesId && item.repeat.scheduledDate === occurrenceDate) : [];
+  const history = histories.find(item => item.repeatOutcome === 'skipped') || histories[0];
+  const historyView = () => ({ ...history, notificationSlot:occurrenceTime, nextReminderAt: next.dueAt || '', nextNotificationEnabled: Boolean(next.occurrence?.notificationEnabled) });
+  // Multi-time completion is a day record, not a replacement for a notification slot.
+  if (history && (!hasMultipleTimes(reminder.repeat) || history.repeatOutcome === 'skipped')) return historyView();
   if (!isRunning && !occurrenceDate) return reminder;
   const source = isRunning ? reminder : { ...reminder, repeat:{...reminder.repeat,status:'active'} };
-  const occurrence = occurrenceDate ? fixedOccurrenceForDate(source, occurrenceDate) : next.occurrence;
+  const occurrence = occurrenceDate ? fixedOccurrenceForDate(source, occurrenceDate, hasMultipleTimes(reminder.repeat) ? occurrenceTime : '') : next.occurrence;
   if (!occurrence) {
+    if (history) return historyView();
     if (occurrenceDate) throw new Error('这次提醒已跳过或不再属于当前循环，请查看历史记录或当前安排。');
     return { ...reminder, repeat: { ...reminder.repeat, status: next.status }, nextReminderAt: '' };
   }
-  const recorded = reminders.find(item => item.repeat?.status === 'history' && item.repeat.seriesId === reminder.repeat.seriesId
-    && item.repeat.scheduledDate === occurrence.repeat.scheduledDate);
+  const recorded = reminders.filter(item => item.repeat?.status === 'history' && item.repeat.seriesId === reminder.repeat.seriesId
+    && item.repeat.scheduledDate === occurrence.repeat.scheduledDate).sort((a,b) => Number(b.repeatOutcome === 'completed') - Number(a.repeatOutcome === 'completed'))[0];
   return { ...occurrence, repeat:{...occurrence.repeat,status:isRunning ? occurrence.repeat.status : reminder.repeat.status},
     nextReminderAt: next.dueAt || '', nextNotificationEnabled: Boolean(next.occurrence?.notificationEnabled), recordedOutcome: recorded?.repeatOutcome || '' };
 }
