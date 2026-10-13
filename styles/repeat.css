@@ -18,3 +18,12 @@
 .repeat-badge { font-size: 11px; font-weight: 500; color: var(--accent-strong); white-space: nowrap; }
 .reminder-item__repeat { margin: 4px 0; color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
 .repeat-management { display: grid; gap: 10px; }
+
+/* Four peer filters stay visible together on a narrow phone. */
+#reminderBoard .filters { display: grid; grid-template-columns: 1fr 1fr minmax(0, 1.4fr) 1fr; width: 100%; box-sizing: border-box; gap: 4px; }
+#reminderBoard .filter { min-width: 0; padding: 7px 3px; white-space: nowrap; }
+.repeat-inactive-actions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.repeat-inactive-actions .button { min-height: 36px; }
+.repeat-resume-preview { padding: 14px; border-radius: 12px; background: var(--surface-muted); color: var(--text); font-weight: 600; overflow-wrap: anywhere; white-space: pre-line; }
+#repeatResumeError:empty, #repeatResumePreview:empty { display: none; }
+#repeatManagement [data-repeat-action="end"] { display: none !important; }

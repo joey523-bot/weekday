@@ -61,6 +61,11 @@ export function updateReminder(id, payload, scope = "once", { occurrenceDate = "
   if (current.repeat?.status === "history") throw new Error("循环历史不能修改，请编辑当前事项");
   const hasRepeat = Object.hasOwn(payload, "repeat");
   const requestedRule = hasRepeat ? normalizeRepeat(payload.repeat) : current.repeat;
+  const inactive = isReminderInactive(current, now);
+  if (inactive && scope !== "series") throw new Error("已停用事项请编辑整个系列");
+  if (inactive && !requestedRule) {
+    throw new Error("停用中的循环不能改为不重复；请保留重复设置，或另建普通事项");
+  }
   if (current.repeat?.mode === "fixed" && (scope === "once" || requestedRule?.mode === "fixed")) {
     const updated = updateFixedReminder(current, payload, requestedRule, scope, occurrenceDate, now);
     commitReminders(state.reminders.map(entry => entry.id === id ? updated : entry));
@@ -80,7 +85,8 @@ export function updateReminder(id, payload, scope = "once", { occurrenceDate = "
     if (scope === "once") {
       // A local date/time exception must never alter the series anchor or future template.
       const time = requestedRule?.time || entry.repeat.time;
-      return normalizeReminder({ ...merged, repeat: { ...entry.repeat, time } });
+      return normalizeReminder({ ...merged, repeat: { ...entry.repeat, time,
+        ...(isRepeatInactive(entry.repeat) ? { status: "paused" } : {}) } });
     }
     if (!requestedRule) return normalizeReminder({ ...merged, repeat: null, repeatOutcome: "" });
     const rule = normalizeRepeat({ ...entry.repeat, ...requestedRule,
@@ -116,6 +122,7 @@ export function updateReminder(id, payload, scope = "once", { occurrenceDate = "
       rule.waitingAfterDate = first.status === "calendar_wait" ? entry.repeat.waitingAfterDate || "" : "";
       rule.status = first.status === "active" && entry.repeat.status === "paused" ? "paused" : first.status;
     }
+    if (isReminderInactive(savedEntry, now)) rule.status = "paused";
     return normalizeReminder({ ...merged, repeat: rule });
   };
   const reminders = state.reminders.map(entry => entry.id === id
@@ -144,14 +151,57 @@ export function setReminderCompletion(id, completed, occurredOn = "") {
   }));
 }
 
-export function manageRepeat(id, action, { occurrenceDate = "", occurredOn = "", now = new Date() } = {}) {
+export function previewRepeatResume(id, { firstDate = "", now = new Date() } = {}) {
+  const entry = state.reminders.find(item => item.id === id);
+  if (!entry?.repeat) throw new Error("找不到可启用的循环事项");
+  if (entry.repeat.status === "history" || entry.completed) throw new Error("循环历史不能重新启用，请管理当前事项");
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) throw new Error("当前时间无效，请稍后重试");
+  const rule = normalizeRepeat(entry.repeat);
+  const projectedStatus = rule.mode === "fixed" ? nextFixedOccurrence(entry, now).status : rule.status;
+  if (!isRepeatInactive(rule) && rule.status !== "calendar_wait" && !["calendar_wait", "ended"].includes(projectedStatus)) {
+    throw new Error("该循环已启用，无需重复启用");
+  }
+  if (rule.mode === "fixed") {
+    const upgraded = upgradeFixedReminder(entry);
+    const candidate = { ...upgraded, repeat: { ...upgraded.repeat, status: "active", resumeAfter: resumeCutoff(rule, now) } };
+    const result = nextFixedOccurrence(candidate, now);
+    if (result.status === "calendar_wait") throw new Error("工作日日历尚未覆盖下一次日期，请更新日历或修改重复规则后再启用");
+    if (result.status !== "active" || !result.occurrence || !result.dueAt || Date.parse(result.dueAt) <= now.getTime()) {
+      throw new Error("当前规则没有未来计划，请延后结束日期或修改重复规则后再启用");
+    }
+    const occurrence = result.occurrence;
+    return { date: occurrence.date, scheduledDate: occurrence.repeat.scheduledDate, time: occurrence.repeat.time,
+      dueAt: result.dueAt, notificationEnabled: occurrence.notificationEnabled, status: "active" };
+  }
+  if (!validRepeatDate(firstDate)) throw new Error("请选择重新启用后的首次日期");
+  if (firstDate < rule.startDate) throw new Error("首次日期不能早于循环开始日期");
+  if (rule.endDate && firstDate > rule.endDate) throw new Error("首次日期不能晚于结束日期，请先修改结束日期");
+  const leadDays = entry.notificationEnabled ? entry.leadDays : 0;
+  const due = Date.parse(`${firstDate}T${rule.time}:00+08:00`) - leadDays * 86400000;
+  if (!Number.isFinite(due) || due <= now.getTime()) {
+    throw new Error(entry.notificationEnabled ? "首次提醒时间（含提前天数）必须晚于现在，请调整首次日期或提醒时间" : "首次计划时间必须晚于现在，请调整首次日期或时间");
+  }
+  return { date: firstDate, scheduledDate: firstDate, time: rule.time, dueAt: new Date(due).toISOString(),
+    notificationEnabled: entry.notificationEnabled, status: "active" };
+}
+
+export function manageRepeat(id, action, { occurrenceDate = "", occurredOn = "", firstDate = "", now = new Date() } = {}) {
   const entry = state.reminders.find(item => item.id === id);
   if (!entry?.repeat) throw new Error("该事项没有循环设置");
   if (entry.repeat.status === "history" || entry.completed) throw new Error("循环历史不能修改，请管理当前事项");
   if (!["complete", "skip", "pause", "resume", "end"].includes(action)) throw new Error("循环操作无效");
   const today = beijingDate(now);
   const rule = normalizeRepeat(entry.repeat);
-  if (rule.status === "ended") throw new Error("该循环已结束");
+  if (action === "resume") {
+    const preview = previewRepeatResume(id, { firstDate, now });
+    const base = rule.mode === "fixed" ? upgradeFixedReminder(entry) : entry;
+    const updated = normalizeReminder({ ...base,
+      ...(rule.mode === "after" ? { date: preview.date } : {}),
+      repeat: { ...base.repeat, status: "active", resumeAfter: resumeCutoff(rule, now),
+        ...(rule.mode === "after" ? { scheduledDate: preview.scheduledDate, waitingAfterDate: "" } : {}) } });
+    commitReminders(state.reminders.map(item => item.id === id ? updated : item));
+    return updated;
+  }
   if (rule.mode === "fixed") return manageFixedRepeat(entry, action, { occurrenceDate, occurredOn, now });
   if (["complete", "skip"].includes(action)) {
     if (rule.status !== "active") throw new Error("请先恢复循环后再完成或跳过");
@@ -178,24 +228,7 @@ export function manageRepeat(id, action, { occurrenceDate = "", occurredOn = "",
     commitReminders(reminders);
     return next || history;
   }
-  let updated;
-  if (action === "resume") {
-    if (!["paused", "calendar_wait"].includes(rule.status)) throw new Error("该循环无需恢复");
-    let outcome;
-    if (rule.status === "calendar_wait" && !rule.waitingAfterDate) {
-      outcome = firstRepeatDate(rule);
-      if (outcome.date) outcome = nextRepeatDate(rule, { action, afterDate: outcome.date, today, now });
-    } else {
-      outcome = nextRepeatDate(rule, { action: rule.status === "calendar_wait" && rule.waitingAfterDate ? "complete" : action,
-        afterDate: rule.mode === "after" ? entry.date : rule.waitingAfterDate || rule.scheduledDate || entry.date, today, now });
-    }
-    updated = { ...entry, date: outcome.date || entry.date,
-      repeat: { ...rule, status: outcome.status, scheduledDate: outcome.date || rule.scheduledDate,
-        waitingAfterDate: outcome.status === "calendar_wait" ? rule.waitingAfterDate : "" } };
-  } else {
-    if (action === "pause" && rule.status !== "active") throw new Error("该循环无需暂停");
-    updated = { ...entry, repeat: { ...rule, status: action === "pause" ? "paused" : "ended" } };
-  }
+  const updated = { ...entry, repeat: { ...rule, status: "paused" } };
   commitReminders(state.reminders.map(item => item.id === id ? updated : item));
   return updated;
 }
@@ -223,7 +256,7 @@ function fixedTarget(entry, occurrenceDate, now) {
 
 function updateFixedReminder(current, payload, requestedRule, scope, occurrenceDate, now) {
   const entry = upgradeFixedReminder(current);
-  const previous = entry.repeat;
+  const previous = isReminderInactive(entry, now) ? { ...entry.repeat, status: "paused" } : entry.repeat;
   const active = { ...entry, repeat: { ...previous, status: "active" } };
   if (scope === "once") {
     const target = fixedTarget(active, occurrenceDate, now);
@@ -277,19 +310,22 @@ function manageFixedRepeat(current, action, { occurrenceDate, occurredOn, now })
     commitReminders([...state.reminders.map(item => item.id === entry.id ? active : item), historical]);
     return historical;
   }
-  let updated;
-  if (action === "resume") {
-    if (!["paused", "calendar_wait"].includes(rule.status) && nextFixedOccurrence(entry, now).status !== "calendar_wait") {
-      throw new Error("该循环无需恢复");
-    }
-    updated = { ...entry, repeat: { ...rule, status: "active", resumeAfter: now.toISOString() } };
-    // Unknown future calendar data is a projected status. Keep known last-period cron candidates alive.
-  } else {
-    if (action === "pause" && !["active", "calendar_wait"].includes(rule.status)) throw new Error("该循环无需暂停");
-    updated = { ...entry, repeat: { ...rule, status: action === "pause" ? "paused" : "ended" } };
-  }
+  const updated = { ...entry, repeat: { ...rule, status: "paused" } };
   commitReminders(state.reminders.map(item => item.id === entry.id ? updated : item));
   return updated;
+}
+
+function isReminderInactive(entry, now) {
+  return isRepeatInactive(entry?.repeat) || (entry?.repeat?.mode === "fixed"
+    && ["active", "calendar_wait"].includes(entry.repeat.status) && nextFixedOccurrence(entry, now).status === "ended");
+}
+
+function isRepeatInactive(rule) {
+  return ["paused", "ended"].includes(rule?.status);
+}
+
+function resumeCutoff(rule, now) {
+  return new Date(Math.max(now.getTime(), Date.parse(rule.resumeAfter) || 0)).toISOString();
 }
 
 function historyRepeat(rule) {

@@ -1,5 +1,5 @@
 import { repeatSummary, beijingDate } from "../utils/repeat.js";
-import { repeatStatusLabel, displayReminder, nextReminderLabel } from "./repeat.js";
+import { repeatStatusLabel, displayReminder, nextReminderLabel, isRepeatInactive } from "./repeat.js";
 import { isWeatherFresh } from "../utils/lifestyle.js";
 import { renderMoon, renderOutfit } from "./lifestyle.js";
 import { isReminderDue } from "../utils/snooze.js";
@@ -169,7 +169,7 @@ export function renderDashboard(state, refs) {
   }
 
   if (refs.reminderSummaryValue && refs.reminderSummaryMeta) {
-    const pending = state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})).filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active"));
+    const pending = state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})).filter((entry) => !entry.completed && !isRepeatInactive(entry) && (!entry.repeat || entry.repeat.status === "active"));
     const upcoming = pending.filter((entry) => reminderDaysUntil(entry) >= 0);
     refs.reminderSummaryValue.textContent = String(pending.length);
     refs.reminderSummaryMeta.textContent = pending.length
@@ -294,7 +294,7 @@ function renderPushNudge(refs, capabilities, notification, state) {
     return;
   }
 
-  const hasNotifiedReminders = state.reminders.some((entry) => entry.notificationEnabled);
+  const hasNotifiedReminders = state.reminders.some((entry) => entry.notificationEnabled && !entry.completed && !isRepeatInactive(entry) && (!entry.repeat || entry.repeat.status === 'active'));
   const shouldShow = !notification.enabled || !capabilities.supported;
   refs.pushNudge.hidden = !shouldShow;
 
@@ -589,14 +589,15 @@ export function renderReminderBoard(state, refs) {
     refs.reminderFilters.hidden = sorted.length === 0;
   }
   if (refs.reminderBoardMeta) {
-    refs.reminderBoardMeta.textContent = sorted.length
-      ? `共 ${sorted.length} 条，已完成的事项会保留在这里`
-      : "把要做的事都放在这里";
+    refs.reminderBoardMeta.textContent = state.preferences.reminderFilter === REMINDER_FILTERS.inactive
+      ? '停用的循环保留在这里，可编辑后重新启用。'
+      : sorted.length ? `共 ${sorted.length} 条，历史与停用的事项保留在相应筛选中` : "把要做的事都放在这里";
   }
 
   refs.filters.forEach((button) => {
     if (button.dataset.filter === REMINDER_FILTERS.completed) button.textContent = sorted.some(entry => entry.repeatOutcome === 'skipped') ? '已完成/跳过' : '已完成';
     button.classList.toggle("is-active", button.dataset.filter === state.preferences.reminderFilter);
+    button.setAttribute('aria-selected', String(button.dataset.filter === state.preferences.reminderFilter));
   });
 
   if (!filtered.length) {
@@ -606,6 +607,11 @@ export function renderReminderBoard(state, refs) {
         <p class="empty-state__hint">${sorted.length ? "换个筛选条件看看。" : "轻点右上角的加号，安排第一件事。"}</p>
       </div>
     `;
+    return;
+  }
+
+  if (state.preferences.reminderFilter === REMINDER_FILTERS.inactive) {
+    refs.reminderList.innerHTML = filtered.map(renderInactiveReminderItem).join('');
     return;
   }
 
@@ -621,7 +627,7 @@ export function renderReminderBoard(state, refs) {
 }
 
 export function renderOverviewReminderPreview(state, refs) {
-  const pending = getSortedReminders(state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})).filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active")));
+  const pending = getSortedReminders(state.reminders.map(entry => displayReminder(entry, {reminders: state.reminders})).filter((entry) => !entry.completed && !isRepeatInactive(entry) && (!entry.repeat || entry.repeat.status === "active")));
   const preview = pending.slice(0, 3);
   refs.overviewReminderCount.textContent = `${pending.length} 条`;
   refs.overviewReminderCount.hidden = pending.length === 0;
@@ -631,6 +637,7 @@ export function renderOverviewReminderPreview(state, refs) {
 }
 
 function renderReminderItem(entry, { preview = false } = {}) {
+  if (isRepeatInactive(entry)) return renderInactiveReminderItem(entry);
   const days = reminderDaysUntil(entry);
   const due = isReminderDue(entry);
   const inactive = entry.repeat && entry.repeat.status !== 'active';
@@ -681,6 +688,24 @@ function renderReminderItem(entry, { preview = false } = {}) {
   `;
 }
 
+function renderInactiveReminderItem(entry) {
+  const id = escapeHtml(entry.id), title = escapeHtml(entry.title);
+  return `<article class="reminder-item reminder-item--inactive" data-reminder-detail="${id}" data-occurrence="">
+    <div class="reminder-item__icon" aria-hidden="true">${getCategoryIcon(entry.category)}</div>
+    <div class="reminder-item__body" role="button" tabindex="0" aria-label="查看已停用循环 ${title}">
+      <div class="reminder-item__title-row"><span class="badge">${escapeHtml(entry.category)}</span><h3 class="reminder-item__title" title="${title}">${title}</h3><span class="repeat-badge">↻ 循环</span></div>
+      <p class="reminder-item__meta">已停用，不再安排提醒</p>
+      <p class="reminder-item__repeat">${escapeHtml(repeatSummary(entry.repeat))}</p>
+      ${entry.notes ? `<p class="reminder-item__notes">${escapeHtml(entry.notes)}</p>` : ''}
+    </div>
+    <div class="reminder-item__side"><button class="reminder-delete-button" data-action="delete" data-id="${id}" type="button" aria-label="删除已停用循环 ${title}">${getDeleteIcon()}</button></div>
+    <div class="repeat-inactive-actions">
+      <button class="button button--secondary button--compact" data-action="edit" data-id="${id}" type="button">编辑</button>
+      <button class="button button--primary button--compact" data-action="repeat-resume" data-id="${id}" type="button">重新启用</button>
+    </div>
+  </article>`;
+}
+
 function formatHour(hour) {
   return `${String(Number(hour) || 0).padStart(2, "0")}:00`;
 }
@@ -709,18 +734,20 @@ function getSortedReminders(reminders) {
 }
 
 export function applyFilter(reminders, filter) {
+  if (filter === REMINDER_FILTERS.inactive) return reminders.filter(entry => isRepeatInactive(entry));
   if (filter === REMINDER_FILTERS.overdue) {
-    return reminders.filter((entry) => !entry.completed && (!entry.repeat || entry.repeat.status === "active") && reminderDaysUntil(entry) < 0);
+    return reminders.filter((entry) => !entry.completed && !isRepeatInactive(entry) && (!entry.repeat || entry.repeat.status === "active") && reminderDaysUntil(entry) < 0);
   }
 
   if (filter === REMINDER_FILTERS.completed) {
     return reminders.filter((entry) => entry.completed);
   }
 
-  return reminders.filter((entry) => !entry.completed);
+  return reminders.filter((entry) => !entry.completed && !isRepeatInactive(entry));
 }
 
 function getEmptyReminderTitle(reminders, filter) {
+  if (filter === REMINDER_FILTERS.inactive) return "还没有已停用循环";
   if (!reminders.length) return "还没有提醒";
   if (filter === REMINDER_FILTERS.completed) return "还没有已完成事项";
   if (filter === REMINDER_FILTERS.overdue) return "没有逾期事项";

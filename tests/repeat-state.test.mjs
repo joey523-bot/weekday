@@ -172,8 +172,8 @@ test('end date is projected without destroying last due candidate; explicit end 
   assert.equal(live(s).length, 1);
   assert.equal(live(s)[0].repeat.status, 'active');
   const ended = s.manageRepeat(added.id, 'end', { now });
-  assert.equal(ended.repeat.status, 'ended');
-  assert.throws(() => s.manageRepeat(added.id, 'resume', { now }), /已结束/);
+  assert.equal(ended.repeat.status, 'paused');
+  assert.throws(() => s.manageRepeat(added.id, 'resume', { now }), /没有未来计划/);
 });
 
 test('version 1 implicit current exception migrates losslessly while future periods use the template', async () => {
@@ -202,7 +202,7 @@ test('after-completion mode retains actual-date progression, skip, single-item p
   assert.equal(history(s)[0].occurredOn, '2026-10-08');
   s.updateReminder(future.id, { date: '2026-10-23' });
   s.manageRepeat(future.id, 'pause', { now });
-  assert.equal(s.manageRepeat(future.id, 'resume', { now }).date, '2026-10-23');
+  assert.equal(s.manageRepeat(future.id, 'resume', { firstDate: '2026-10-23', now }).date, '2026-10-23');
   const skipped = s.manageRepeat(future.id, 'skip', { now: new Date('2026-10-12T18:00:00Z') });
   assert.equal(skipped.date, '2026-10-27');
   assert.equal(history(s).at(-1).occurredOn, '');
@@ -225,10 +225,10 @@ test('unknown calendar is a recoverable projected condition and never auto-gener
   const s = await setup();
   const added = s.addReminder(payload({ freq: 'weekday', startDate: '2099-01-01', workday: 'actual' }));
   assert.equal(nextFixedOccurrence(added, now).status, 'calendar_wait');
-  const resumed = s.manageRepeat(added.id, 'resume', { now });
-  assert.equal(nextFixedOccurrence(resumed, now).status, 'calendar_wait');
+  assert.throws(() => s.manageRepeat(added.id, 'resume', { now }), /日历/);
+  assert.equal(nextFixedOccurrence(live(s)[0], now).status, 'calendar_wait');
   assert.equal(history(s).length, 0);
-  s.updateReminder(added.id, { repeat: { ...resumed.repeat, workday: 'weekdays' } }, 'series', { now });
+  s.updateReminder(added.id, { repeat: { ...added.repeat, workday: 'weekdays' } }, 'series', { now });
   assert.equal(next(s).date, '2099-01-01');
 });
 
@@ -369,4 +369,133 @@ test('ordinary to fixed conversion applies the save cutoff instead of the origin
   assert.equal(converted.createdAt, ordinary.createdAt);
   assert.equal(converted.repeat.resumeAfter, saved.toISOString());
   assert.deepEqual(fixedDueOccurrences(converted, saved), []);
+});
+
+test('legacy paused and ended records remain inactive through content, rule and mode edits', async () => {
+  for (const status of ['paused', 'ended']) {
+    for (const originalMode of ['fixed', 'after']) {
+      const s = await setup();
+      const added = s.addReminder(payload({ freq: 'custom', mode: originalMode, interval: 2, unit: 'day' }));
+      s.replaceSyncedData({ reminders: [{ ...added, repeat: { ...added.repeat, status } }] });
+      let edited = s.updateReminder(added.id, { title: '保持停用' }, 'series', { now });
+      assert.equal(edited.repeat.status, 'paused');
+      for (const mode of ['fixed', 'after', originalMode]) {
+        edited = s.updateReminder(added.id, { leadDays: 1,
+          repeat: { ...edited.repeat, mode, interval: 3, time: '18:45', endDate: '2026-12-31' } }, 'series', { now });
+        assert.equal(edited.repeat.status, 'paused');
+        assert.equal(edited.repeat.seriesId, added.repeat.seriesId);
+        assert.equal(edited.id, added.id);
+      }
+      assert.throws(() => s.updateReminder(added.id, { repeat: null }, 'series', { now }), /停用.*不重复/);
+      assert.throws(() => s.updateReminder(added.id, { title: '仅本次' }, 'once', { now }), /整个系列/);
+      assert.equal(live(s)[0].repeat.status, 'paused');
+      assert.equal(history(s).length, 0);
+    }
+  }
+});
+
+test('editing a naturally exhausted fixed schedule does not silently reactivate it', async () => {
+  const s = await setup();
+  const added = s.addReminder(payload({ endDate: '2026-10-12' }));
+  assert.equal(added.repeat.status, 'active');
+  assert.equal(nextFixedOccurrence(added, now).status, 'ended');
+  assert.throws(() => s.previewRepeatResume(added.id, { now }), /没有未来计划/);
+  const updated = s.updateReminder(added.id, { repeat: { ...added.repeat, endDate: '2026-11-30' } }, 'series', { now });
+  assert.equal(updated.repeat.status, 'paused');
+  assert.deepEqual(fixedDueOccurrences(updated, now), []);
+  const preview = s.previewRepeatResume(added.id, { now });
+  assert.equal(preview.date, '2026-10-13');
+  assert.equal(preview.status, 'active');
+  assert.equal(live(s)[0].repeat.status, 'paused');
+  assert.equal(s.manageRepeat(added.id, 'resume', { now }).repeat.status, 'active');
+});
+
+test('fixed resume preview is read only, exact, supports legacy ended and preserves identity/history', async () => {
+  const s = await setup();
+  const added = s.addReminder(payload());
+  s.manageRepeat(added.id, 'complete', { occurrenceDate: '2026-10-11', occurredOn: '2026-10-11', now });
+  const snapshot = s.getSyncSnapshot();
+  snapshot.reminders = snapshot.reminders.map(item => item.id === added.id ? { ...item, repeat: { ...item.repeat, status: 'ended' } } : item);
+  s.replaceSyncedData(snapshot);
+  const historyBefore = JSON.stringify(history(s));
+  const before = JSON.stringify(s.getState());
+  s.fail(true);
+  const preview = s.previewRepeatResume(added.id, { now });
+  assert.deepEqual(preview, { date: '2026-10-13', scheduledDate: '2026-10-13', time: '09:30',
+    dueAt: '2026-10-13T01:30:00.000Z', notificationEnabled: true, status: 'active' });
+  assert.equal(JSON.stringify(s.getState()), before);
+  assert.throws(() => s.manageRepeat(added.id, 'resume', { now }), /quota/);
+  assert.equal(JSON.stringify(s.getState()), before);
+  s.fail(false);
+  const restored = s.manageRepeat(added.id, 'resume', { now });
+  const projected = nextFixedOccurrence(restored, now);
+  assert.equal(projected.dueAt, preview.dueAt);
+  assert.equal(projected.occurrence.date, preview.date);
+  assert.equal(restored.id, added.id);
+  assert.equal(restored.repeat.seriesId, added.repeat.seriesId);
+  assert.equal(restored.repeat.resumeAfter, now.toISOString());
+  assert.equal(JSON.stringify(history(s)), historyBefore);
+  assert.throws(() => s.previewRepeatResume(added.id, { now }), /已启用/);
+});
+
+test('expired end dates and unknown calendars reject both preview and resume without mutation', async () => {
+  for (const repeat of [{ endDate: '2026-10-12' }, { freq: 'weekday', startDate: '2099-01-01', workday: 'actual' }]) {
+    const s = await setup();
+    const added = s.addReminder(payload(repeat));
+    s.manageRepeat(added.id, 'pause', { now });
+    const before = JSON.stringify(s.getState());
+    for (const operation of [() => s.previewRepeatResume(added.id, { now }), () => s.manageRepeat(added.id, 'resume', { now })]) {
+      assert.throws(operation, /未来计划|日历/);
+      assert.equal(JSON.stringify(s.getState()), before);
+    }
+  }
+});
+
+test('after resume requires a valid first date and validates the actual lead-time-adjusted due moment', async () => {
+  const s = await setup();
+  const added = s.addReminder({ ...payload({ freq: 'custom', mode: 'after', interval: 3, endDate: '2026-10-20' }), leadDays: 1 });
+  s.manageRepeat(added.id, 'pause', { now });
+  const before = JSON.stringify(s.getState());
+  for (const firstDate of ['', '2026-02-30', '2026-10-09', '2026-10-21', '2026-10-13']) {
+    assert.throws(() => s.previewRepeatResume(added.id, { firstDate, now }), /首次|提醒时间/);
+    assert.throws(() => s.manageRepeat(added.id, 'resume', { firstDate, now }), /首次|提醒时间/);
+    assert.equal(JSON.stringify(s.getState()), before);
+  }
+  const preview = s.previewRepeatResume(added.id, { firstDate: '2026-10-14', now });
+  assert.equal(preview.dueAt, '2026-10-13T01:30:00.000Z');
+  assert.equal(preview.scheduledDate, '2026-10-14');
+  const restored = s.manageRepeat(added.id, 'resume', { firstDate: '2026-10-14', now });
+  assert.equal(restored.id, added.id);
+  assert.equal(restored.repeat.seriesId, added.repeat.seriesId);
+  assert.equal(restored.date, preview.date);
+  assert.equal(restored.repeat.scheduledDate, preview.scheduledDate);
+  assert.equal(restored.repeat.status, 'active');
+  const following = s.manageRepeat(restored.id, 'complete', { occurredOn: '2026-10-12', now });
+  assert.equal(following.date, '2026-10-15');
+});
+
+test('after resume with notifications off uses future planned time rather than obsolete lead-day reminder', async () => {
+  const s = await setup();
+  const added = s.addReminder({ ...payload({ freq: 'custom', mode: 'after', time: '18:45' }), notificationEnabled: false, leadDays: 3 });
+  s.manageRepeat(added.id, 'pause', { now });
+  const preview = s.previewRepeatResume(added.id, { firstDate: '2026-10-12', now });
+  assert.equal(preview.notificationEnabled, false);
+  assert.equal(preview.dueAt, '2026-10-12T10:45:00.000Z');
+  assert.throws(() => s.previewRepeatResume(added.id, { firstDate: '2026-10-12', now: new Date(preview.dueAt) }), /晚于现在/);
+  const restored = s.manageRepeat(added.id, 'resume', { firstDate: '2026-10-12', now });
+  assert.equal(restored.date, '2026-10-12');
+  assert.equal(restored.notificationEnabled, false);
+  assert.equal(restored.leadDays, 3);
+});
+
+test('history cannot be resumed or edited and stopping with legacy end action stores paused', async () => {
+  const s = await setup();
+  const added = s.addReminder(payload());
+  const record = s.manageRepeat(added.id, 'complete', { occurrenceDate: '2026-10-12', occurredOn: '2026-10-12', now });
+  assert.throws(() => s.previewRepeatResume(record.id, { now }), /历史/);
+  assert.throws(() => s.manageRepeat(record.id, 'resume', { now }), /历史/);
+  assert.throws(() => s.updateReminder(record.id, { title: '修改' }, 'series', { now }), /历史/);
+  const stopped = s.manageRepeat(added.id, 'end', { now });
+  assert.equal(stopped.repeat.status, 'paused');
+  assert.equal(s.manageRepeat(added.id, 'resume', { now }).repeat.status, 'active');
 });

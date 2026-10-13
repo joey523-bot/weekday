@@ -112,9 +112,9 @@ export function createShell() {
             <section id="repeatManagement" class="repeat-management" aria-label="循环管理" hidden>
               <p id="repeatDetailNote" class="form-note"></p>
               <button type="button" class="button button--secondary" data-repeat-action="skip">跳过本次</button>
-              <button type="button" class="button button--secondary" data-repeat-action="pause">暂停循环</button>
-              <button type="button" class="button button--secondary" data-repeat-action="resume" hidden>恢复循环</button>
-              <button type="button" class="button button--secondary" data-repeat-action="end">结束循环</button>
+              <button type="button" class="button button--secondary" data-repeat-action="pause">停用循环</button>
+              <button type="button" class="button button--primary" data-repeat-action="resume" hidden>重新启用</button>
+              <button type="button" class="button button--secondary" data-repeat-action="end" hidden>结束循环</button>
               <button type="button" class="button button--secondary" data-repeat-action="sync" hidden>重试同步</button>
             </section>
             <button id="reminderDetailEdit" class="button button--secondary" type="button">编辑事项</button>
@@ -163,6 +163,7 @@ export function createShell() {
               <button class="filter is-active" data-filter="all" type="button">待处理</button>
               <button class="filter" data-filter="overdue" type="button">已逾期</button>
               <button class="filter" data-filter="completed" type="button">已完成</button>
+              <button class="filter" data-filter="inactive" type="button">已停用</button>
             </div>
             <p id="reminderBoardState" class="form-note reminder-board-state" aria-live="polite"></p>
             <div id="reminderList" class="reminder-list"></div>

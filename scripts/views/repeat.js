@@ -29,18 +29,31 @@ export function repeatDialogs() {
       <button type="button" class="button button--secondary" data-repeat-scope="once">仅本次</button><p class="form-note">调整当前事项的日期、时间和内容，后续仍按原规则。</p>
       <button type="button" class="button button--primary" data-repeat-scope="series">整个系列</button><p class="form-note">从当前未完成项及未来生效，可修改重复规则。</p>
     </div>
+  </dialog>
+  <dialog id="repeatResumeDialog" class="reminder-detail repeat-dialog" aria-labelledby="repeatResumeHeading">
+    <button id="repeatResumeClose" class="reminder-detail__close" type="button" aria-label="取消重新启用">×</button>
+    <div class="stack-form">
+      <h2 id="repeatResumeHeading">重新启用循环</h2>
+      <p id="repeatResumeNote" class="form-note"></p>
+      <label id="repeatResumeDateField" class="field" hidden><span class="field__label">恢复后的首次事项日期（北京时间）</span><input id="repeatResumeDate" class="input" type="date" /></label>
+      <p id="repeatResumePreview" class="repeat-resume-preview" aria-live="polite"></p>
+      <p id="repeatResumeError" class="form-note" role="alert"></p>
+      <button id="repeatResumeConfirm" class="button button--primary" type="button">确认启用</button>
+      <button id="repeatResumeEdit" class="button button--secondary" type="button" hidden>先编辑</button>
+      <button id="repeatResumeCancel" class="button button--secondary" type="button">取消</button>
+    </div>
   </dialog>`;
 }
 
 export function bindRepeatSettings(root, refs, onChange) {
   const $ = id => root.querySelector(`#${id}`);
-  let current = null, locked = false;
+  let current = null, locked = false, stopped = false;
   const dialog = $('repeatDialog');
   const timeInput = $('reminderRepeatTime');
   function showSummary() {
     $('reminderRepeatSummary').textContent = repeatSummary(current);
     $('reminderRepeatButton').disabled = locked;
-    $('reminderRepeatScopeNote').textContent = locked ? '仅修改本次；重复规则与后续计划保持不变。' : current ? '日期由重复规则安排；如需调整，请打开重复设置。固定周期自动接续下次提醒。' : '';
+    $('reminderRepeatScopeNote').textContent = stopped ? '已停用；保存修改后仍保持停用，重新启用后才会安排。' : locked ? '仅修改本次；重复规则与后续计划保持不变。' : current ? '日期由重复规则安排；如需调整，请打开重复设置。固定周期自动接续下次提醒。' : '';
     refs.reminderDateInput.disabled = Boolean(current && !locked);
     refs.reminderHourSelect.closest('label').hidden = Boolean(current);
     $('reminderRepeatTimeField').hidden = !current;
@@ -49,6 +62,7 @@ export function bindRepeatSettings(root, refs, onChange) {
   }
   function options() {
     const freq = $('repeatFrequency').value, unit = $('repeatUnit').value, mode = $('repeatMode').value;
+    $('repeatFrequency').querySelector('option[value="none"]').disabled = stopped;
     $('repeatCustom').hidden = freq !== 'custom';
     $('repeatWeek').hidden = !(freq === 'week' || freq === 'custom' && unit === 'week' && mode === 'fixed');
     $('repeatWork').hidden = freq !== 'weekday';
@@ -58,7 +72,7 @@ export function bindRepeatSettings(root, refs, onChange) {
     $('repeatInterval').disabled = freq !== 'custom';
     $('repeatStart').required = $('repeatTime').required = freq !== 'none';
     $('repeatEnd').required = !$('repeatEndField').hidden;
-    $('repeatModeNote').textContent = freq === 'none' ? '普通事项只在所选日期提醒。' : freq === 'custom' && mode === 'after'
+    $('repeatModeNote').textContent = stopped ? '当前循环已停用。这里仅保存重复规则，保存后不会自动启用。' : freq === 'none' ? '普通事项只在所选日期提醒。' : freq === 'custom' && mode === 'after'
       ? '从实际完成日计算下一次；跳过从当天计算。未完成时不开始下一轮。'
       : '固定周期到点自动接续，不需要点完成。完成只记历史；跳过只取消所选这一次，缺少对应日时跳过该期。';
   }
@@ -105,7 +119,12 @@ export function bindRepeatSettings(root, refs, onChange) {
   timeInput.addEventListener('input', () => { if (current) current = { ...current, time:timeInput.value }; });
   showSummary();
   return {
-    set(value, {lock = false} = {}) { current = value ? normalizeRepeat(value) : null; locked = lock; showSummary(); },
+    set(value, {lock = false, inactive = false} = {}) {
+      current = value ? normalizeRepeat(value) : null;
+      stopped = Boolean(current && (inactive || ['paused','ended'].includes(current.status)));
+      locked = stopped ? false : lock;
+      showSummary();
+    },
     get() { return current ? normalizeRepeat({...current,time:timeInput.value}) : null; },
     isRepeating() { return Boolean(current); },
     chooseScope() {
@@ -121,10 +140,18 @@ export function bindRepeatSettings(root, refs, onChange) {
   };
 }
 
+export function isRepeatInactive(reminder, now = new Date()) {
+  if (!reminder?.repeat || reminder.completed || reminder.repeat.status === 'history') return false;
+  if (['paused','ended'].includes(reminder.repeat.status)) return true;
+  return reminder.repeat.mode === 'fixed' && ['active','calendar_wait'].includes(reminder.repeat.status)
+    && nextFixedOccurrence(reminder, now).status === 'ended';
+}
+
 export function repeatStatusLabel(reminder) {
   if (!reminder?.repeat) return '';
   if (reminder.repeat.status === 'history') return reminder.repeatOutcome === 'skipped' ? '本次已跳过' : '本次已完成';
-  return {active:'进行中',paused:'已暂停',ended:'循环已结束',calendar_wait:'工作日日历待更新'}[reminder.repeat.status] || '';
+  if (isRepeatInactive(reminder)) return '已停用';
+  return {active:'进行中',paused:'已停用',ended:'已停用',calendar_wait:'工作日日历待更新'}[reminder.repeat.status] || '';
 }
 
 // Presentation-only projection. Never write a projected cursor or terminal status to state.
