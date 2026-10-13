@@ -864,17 +864,9 @@ function registerServiceWorker() {
     return;
   }
 
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  let updateReloading = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController || updateReloading) {
-      return;
-    }
-
-    updateReloading = true;
-    window.location.reload();
-  });
-
+  // Do not reload on controllerchange: repeated controller changes can restart
+  // a reload loop because in-memory guards disappear on every navigation.
+  // Keep the current page and drafts; the explicit refresh action applies updates.
   const register = async () => {
     try {
       const registration = await navigator.serviceWorker.register("./sw.js", {
