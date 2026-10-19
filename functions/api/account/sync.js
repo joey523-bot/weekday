@@ -41,6 +41,10 @@ export async function onRequestPut(context) {
       snapshot = preserveMissingOccurrences(preserveMissingCategories(snapshot, previous), previous);
       if (!isSnapshot(snapshot)) return badRequest("同步数据无效");
     }
+    if (!Object.hasOwn(snapshot.preferences || {}, 'clockout') && previous?.preferences?.clockout) {
+      snapshot = {...snapshot,preferences:{...snapshot.preferences,clockout:previous.preferences.clockout}};
+    }
+    if (!isSnapshot(snapshot)) return badRequest("同步数据无效");
     const now = new Date().toISOString();
     const writes = await context.env.DB.batch([context.env.DB.prepare(
       "UPDATE account_sync SET snapshot_data = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND revision = ?"

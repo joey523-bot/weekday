@@ -1,4 +1,4 @@
-const APP_VERSION = "20261013.intraday.1";
+const APP_VERSION = "20261019.clockout.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
@@ -23,6 +23,8 @@ const STATIC_ASSETS = [
   "./scripts/app.js",
   "./scripts/config.js",
   "./scripts/state.js",
+  "./scripts/utils/clockout.js",
+  "./scripts/views/clockout.js",
   "./scripts/utils/occurrence.js",
   "./scripts/utils/repeat.js",
   "./scripts/views/repeat.js",

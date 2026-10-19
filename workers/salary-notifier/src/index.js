@@ -1,3 +1,4 @@
+import { CLOCKOUT_SELECT, processClockoutAccount } from "./clockout.js";
 import { processRepeatAccount } from "./repeat.js";
 import { REPEAT_ACCOUNT_SELECT, REPEAT_ACCOUNT_FILTER } from "../../../functions/_utils/repeat-push.js";
 import { processCycleAccount } from "./cycle.js";
@@ -12,7 +13,7 @@ const FIXED_TIMEZONE = "Asia/Shanghai";
 
 export default {
   async scheduled(controller, env, ctx) {
-    const [salaryRecords, reminderRecords, dailyRecords, snoozes, cycleAccounts, repeatAccounts] = await Promise.all([
+    const [salaryRecords, reminderRecords, dailyRecords, snoozes, cycleAccounts, repeatAccounts, clockoutAccounts] = await Promise.all([
       env.DB.prepare(
       `
         SELECT
@@ -67,10 +68,11 @@ export default {
       env.DB.prepare(`SELECT * FROM reminder_snoozes WHERE active=1 AND next_at<=?
         AND (mode='once' OR until_at>?)`).bind(new Date().toISOString(), new Date().toISOString()).all(),
       env.DB.prepare(`${CYCLE_ACCOUNT_SELECT} WHERE json_extract(snapshot_data,'$.preferences.cycle.pushEnabled')=1`).all(),
-      env.DB.prepare(`${REPEAT_ACCOUNT_SELECT} WHERE ${REPEAT_ACCOUNT_FILTER}`).all()
+      env.DB.prepare(`${REPEAT_ACCOUNT_SELECT} WHERE ${REPEAT_ACCOUNT_FILTER}`).all(),
+      env.DB.prepare(`${CLOCKOUT_SELECT} WHERE json_extract(snapshot_data,'$.preferences.clockout.enabled')=1`).all()
     ]);
 
-    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length && !cycleAccounts?.results?.length && !repeatAccounts?.results?.length) {
+    if (!salaryRecords?.results?.length && !reminderRecords?.results?.length && !dailyRecords?.results?.length && !snoozes?.results?.length && !cycleAccounts?.results?.length && !repeatAccounts?.results?.length && !clockoutAccounts?.results?.length) {
       return;
     }
 
@@ -78,6 +80,7 @@ export default {
     webpush.setVapidDetails(subject, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
 
     const jobs = [
+      ...(clockoutAccounts.results || []).map(entry => processClockoutAccount(entry, env)),
       ...(salaryRecords.results || []).map((entry) => processSalaryEntry(entry, env)),
       ...(reminderRecords.results || []).map((entry) => processReminderEntry(entry, env)),
       ...(dailyRecords.results || []).map((entry) => processDailyCountdownEntry(entry, env)),

@@ -1,3 +1,4 @@
+import { normalizeClockout } from "./utils/clockout.js";
 import { normalizeCycle } from "./utils/cycle.js";
 import { normalizeRepeat, firstRepeatDate, nextRepeatDate, nextFixedOccurrence, fixedOccurrenceForDate, beijingDate, validRepeatDate } from "./utils/repeat.js";
 import { isOccurrenceDate } from "./utils/occurrence.js";
@@ -12,6 +13,11 @@ export function updateCyclePreferences(value) {
   try { persistState(); } catch(error) { state.preferences.cycle = previous; throw error; }
 }
 
+export function updateClockout(value) {
+ const previous=state.preferences.clockout;
+ state.preferences.clockout=normalizeClockout(value);
+ try {persistState();} catch(error) {state.preferences.clockout=previous;throw error;}
+}
 export function getState() {
   return state;
 }
@@ -503,6 +509,7 @@ export function replaceSyncedData(payload) {
       ...(payload?.preferences || {}),
       customCategories: payload?.preferences?.customCategories || [],
       cycle: payload?.preferences?.cycle || {},
+      clockout: payload?.preferences?.clockout,
       customThemes: state.preferences.customThemes,
       activeCustomThemeId: state.preferences.activeCustomThemeId
     }
@@ -547,6 +554,7 @@ export function getSyncSnapshot() {
       nickname: state.preferences.nickname,
       customCategories: state.preferences.customCategories,
       cycle: state.preferences.cycle,
+      clockout: normalizeClockout(state.preferences.clockout),
       theme: state.preferences.theme === "custom" ? DEFAULT_THEME : state.preferences.theme
     },
     updatedAt: new Date().toISOString()
@@ -574,7 +582,9 @@ function persistState() {
 }
 
 function cloneDefaultState() {
-  return JSON.parse(JSON.stringify(DEFAULT_STATE));
+  const value=JSON.parse(JSON.stringify(DEFAULT_STATE));
+  value.preferences.clockout=normalizeClockout();
+  return value;
 }
 
 function normalizeState(raw) {
@@ -660,6 +670,7 @@ function normalizePreferences(raw, base) {
     nickname: String(raw?.nickname || "").trim().slice(0, 20),
     customCategories: normalizeCustomCategories(raw?.customCategories),
     cycle: normalizeCycle(raw?.cycle),
+    clockout: normalizeClockout(raw?.clockout),
     customThemes: themes,
     activeCustomThemeId
   };

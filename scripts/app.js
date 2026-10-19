@@ -1,3 +1,6 @@
+import { setupClockout } from "./views/clockout.js";
+import { updateClockout } from "./state.js";
+let clockoutUI;
 import { bindRepeatSettings, repeatStatusLabel, displayReminder, nextReminderLabel, isRepeatInactive, hasMultipleTimes } from "./views/repeat.js";
 import { repeatSummary, beijingDate } from "./utils/repeat.js";
 import { setupLifestyle, renderLifestyle } from "./views/lifestyle.js";
@@ -131,6 +134,7 @@ async function startApplication(root) {
   applyTheme(getState().preferences.theme);
   root.innerHTML = createShell();
   setupLifestyle(root);
+  clockoutUI=setupClockout(root,{getState,save:updateClockout,sync:flushAccountSync});
 
   const refs = createRefs(document);
   const state = getState();
@@ -154,6 +158,7 @@ async function startApplication(root) {
   bindReminderNavigation(refs);
   clearTimeout(dueRefreshTimer);
   const refreshClockViews = () => {
+    clockoutUI?.render();
     if (document.visibilityState !== 'visible' || !activeAccount) return;
     renderDashboard(getState(), refs);
     renderReminderBoard(getState(), refs);
@@ -739,6 +744,7 @@ function renderCategoryOptions(refs, selected = refs.reminderCategoryInput.value
 }
 
 function renderAll(refs) {
+  clockoutUI?.render();
   renderCategoryOptions(refs);
   cycleUI?.render();
   const state = getState();

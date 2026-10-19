@@ -153,3 +153,12 @@ CREATE TABLE IF NOT EXISTS recurring_reminder_deliveries (
 );
 CREATE INDEX IF NOT EXISTS idx_recurring_reminder_delivery_recent
   ON recurring_reminder_deliveries (user_id, attempted_at DESC);
+
+CREATE TABLE IF NOT EXISTS clockout_deliveries (
+ user_id TEXT NOT NULL,
+ installation_id TEXT NOT NULL,
+ day TEXT NOT NULL,
+ status TEXT NOT NULL,
+ attempted_at TEXT NOT NULL,
+ PRIMARY KEY(user_id, installation_id, day)
+);
