@@ -1,4 +1,4 @@
-const APP_VERSION = "20261020.clockout.2";
+const APP_VERSION = "20261020.clockout.3";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",

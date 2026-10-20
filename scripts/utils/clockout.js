@@ -11,7 +11,7 @@ export function normalizeDay(raw) {
 }
 export function normalizeClockout(raw) {
  const entries = (obj,check,convert) => Object.fromEntries(Object.entries(obj||{}).filter(([key,value])=>validDate(key)&&check(value)).slice(-400).map(([key,value])=>[key,convert(value)]));
- return {version:1,enabled:raw?.enabled===true,mode:raw?.mode==='fixed'?'fixed':'flex',pushEnabled:raw?.pushEnabled!==false,
+ return {version:1,enabled:true,mode:raw?.mode==='fixed'?'fixed':'flex',pushEnabled:raw?.pushEnabled!==false,
  week:Array.from({length:7},(_,i)=>normalizeDay(raw?.week?.[i])),
  dates:entries(raw?.dates,value=>value&&typeof value==='object',normalizeDay), records:entries(raw?.records,validTime,value=>value)};
 }

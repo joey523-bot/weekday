@@ -21,3 +21,5 @@ test('rest, makeup workday, calendar unavailable and same-day overflow',()=>{
 test('at target, state becomes due; invalid dates are rejected',()=>{
  assert.equal(clockoutFor(settings(),date,new Date('2026-10-19T18:06:00+08:00')).status,'due');assert.equal(clockoutFor(settings(),'2026-02-30',now).status,'invalid');
 });
+
+test('homepage countdown is always enabled including legacy disabled settings',()=>{assert.equal(normalizeClockout().enabled,true);assert.equal(normalizeClockout({enabled:false}).enabled,true);assert.equal(clockoutFor({enabled:false},date,now).status,'missing');});
