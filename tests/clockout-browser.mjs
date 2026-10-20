@@ -83,9 +83,14 @@ try {
   assert.equal(await page.evaluate(()=>document.querySelector('.countdown-duo').nextElementSibling.id),'homeMoon');
   await page.locator('#homeClockout').click();
   await page.evaluate(async()=>{const state=await import('/scripts/state.js');state.updateClockout({...state.getState().preferences.clockout,enabled:false});});
+  await page.locator('[data-clock-record] summary').click();
   await page.locator('[name=record]').fill('09:06');
   await page.locator('[data-clock-form=record] button[type=submit]').click();
-  await page.locator('#clockoutDetail [data-clock-status]').filter({hasText:'已保存并同步'}).waitFor();
+  await page.locator('#clockoutDetail').waitFor({state:'hidden'});
+  await page.locator('#homeClockout').click();
+  assert.equal(await page.locator('[data-clock-now]').isDisabled(),true);
+  assert.match(await page.locator('#clockoutDetail').innerText(),/实际上班：09:06/);
+  assert.equal(await page.locator('[data-clock-record]').getAttribute('open'),null);
   await page.locator('#clockoutDetail [data-close-dialog]').click();
   assert.equal(await page.locator('#homeClockout [data-digit]').allTextContents().then(v=>v.join(':')),'02:16:00');
   await page.reload();
@@ -93,12 +98,12 @@ try {
   assert.equal(fixture.snapshot().preferences.clockout.enabled,true);
   assert.equal(fixture.snapshot().preferences.clockout.records['2026-10-19'],'09:06');
   await page.locator('#homeClockout').click();
-  await page.locator('#clockoutDetail details summary').click();
+  await page.locator('#clockoutDetail summary').filter({hasText:'调整这一天'}).click();
   await page.locator('[name="d-end"]').fill('19:00');
   await page.locator('[data-clock-form=date] button[type=submit]').click();
   await page.locator('#clockoutDetail [data-clock-status]').filter({hasText:'已保存并同步'}).waitFor();
   assert.match(await page.locator('#clockoutDetail').innerText(),/19:00可下班/);
-  await page.locator('#clockoutDetail details summary').click();
+  await page.locator('#clockoutDetail summary').filter({hasText:'调整这一天'}).click();
   await page.locator('[data-clock-restore]').click();
   await page.locator('#clockoutDetail').filter({hasText:'18:06可下班'}).waitFor();
   await page.locator('#clockoutDetail [data-close-dialog]').click();
@@ -111,5 +116,14 @@ try {
   assert.equal(await page.locator('#homeClockout [data-digit]').allTextContents().then(v=>v.join(':')),'02:14:59');
   await page.setViewportSize({width:320,height:740});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.clock.setSystemTime(new Date('2026-10-20T09:12:00+08:00'));
+  await page.locator('#homeClockout').click();
+  assert.equal(await page.locator('[data-clock-now]').isEnabled(),true);
+  await page.locator('[data-clock-now]').click();
+  await page.locator('#clockoutDetail').waitFor({state:'hidden'});
+  await page.locator('#homeClockout').click();
+  assert.equal(await page.locator('[data-clock-now]').isDisabled(),true);
+  assert.match(await page.locator('#clockoutDetail').innerText(),/实际上班：09:12/);
+  await page.locator('#clockoutDetail [data-close-dialog]').click();
  },{fixedNow:'2026-10-19T15:50:00+08:00'});
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
