@@ -82,6 +82,7 @@ try {
   assert.equal(await page.evaluate(()=>document.querySelector('.salary-snapshot').nextElementSibling.id),'homeClockout');
   assert.equal(await page.evaluate(()=>document.querySelector('#homeClockout').nextElementSibling.id),'homeMoon');
   await page.locator('#homeClockout').click();
+  await page.evaluate(async()=>{const state=await import('/scripts/state.js');state.updateClockout({...state.getState().preferences.clockout,enabled:false});});
   await page.locator('[name=record]').fill('09:06');
   await page.locator('[data-clock-form=record] button[type=submit]').click();
   await page.locator('#clockoutDetail [data-clock-status]').filter({hasText:'已保存并同步'}).waitFor();
@@ -89,6 +90,7 @@ try {
   assert.match(await page.locator('#homeClockout').innerText(),/2小时16分钟/);
   await page.reload();
   await page.locator('#homeClockout').filter({hasText:'2小时16分钟'}).waitFor();
+  assert.equal(fixture.snapshot().preferences.clockout.enabled,true);
   assert.equal(fixture.snapshot().preferences.clockout.records['2026-10-19'],'09:06');
   await page.locator('#homeClockout').click();
   await page.locator('#clockoutDetail details summary').click();
