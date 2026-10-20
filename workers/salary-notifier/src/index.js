@@ -1,3 +1,5 @@
+import { dailyNotificationPayload } from "./push-payloads.js";
+import { diagnosticPush } from "./diagnostic.js";
 import { CLOCKOUT_SELECT, processClockoutAccount } from "./clockout.js";
 import { processRepeatAccount } from "./repeat.js";
 import { REPEAT_ACCOUNT_SELECT, REPEAT_ACCOUNT_FILTER } from "../../../functions/_utils/repeat-push.js";
@@ -12,6 +14,7 @@ const DAY_MS = 86400000;
 const FIXED_TIMEZONE = "Asia/Shanghai";
 
 export default {
+  fetch: diagnosticPush,
   async scheduled(controller, env, ctx) {
     const [salaryRecords, reminderRecords, dailyRecords, snoozes, cycleAccounts, repeatAccounts, clockoutAccounts] = await Promise.all([
       env.DB.prepare(
@@ -121,12 +124,7 @@ export async function processDailyCountdownEntry(entry, env, now = new Date()) {
   `).bind(cycleKey, stamp, entry.installation_id, cycleKey, entry.installation_id).run();
   if (claim.meta?.changes !== 1) return;
   const days = daysBetween(local, target);
-  const payload = JSON.stringify({
-    title: days === 0 ? "今天发工资" : `距离发工资还有${days}天`,
-    body: days === 0 ? "今天是本次实际发薪日。" : `下次发薪日：${target.month}月${target.day}日。`,
-    tag: `salary-daily-${cycleKey}`,
-    url: env.APP_URL || "/"
-  });
+  const payload = JSON.stringify(dailyNotificationPayload(days, target, cycleKey, env));
   try {
     await webpush.sendNotification({
       endpoint: entry.endpoint, keys: { p256dh: entry.p256dh, auth: entry.auth }

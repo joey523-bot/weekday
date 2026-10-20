@@ -1,3 +1,4 @@
+import { repeatNotificationPayload } from "./push-payloads.js";
 import webpush from "web-push";
 import { REPEAT_ACCOUNT_SELECT, repeatPushCandidates, repeatDeliverySlotKey, sameRepeatOccurrence } from "../../../functions/_utils/repeat-push.js";
 
@@ -36,13 +37,7 @@ export async function processRepeatAccount(record, env, now = new Date(), clock 
     }
     try {
       await webpush.sendNotification({ endpoint: currentDevice.endpoint,
-        keys: { p256dh: currentDevice.p256dh, auth: currentDevice.auth } }, JSON.stringify({
-        title: live.title,
-        body: Number(live.leadDays) > 0 ? `${live.leadDays}天后需要处理：${live.title}（循环事项）。` : `今天需要处理：${live.title}（循环事项）。`,
-        tag: `repeat-${live.repeat.seriesId}-${slotKey}`,
-        reminderId: live.id,
-        url: `${(env.APP_URL || '/').split('#')[0]}#reminder=${encodeURIComponent(live.id)}&occurrence=${encodeURIComponent(live.repeat.scheduledDate)}${live.repeat.times?.length ? `&slot=${encodeURIComponent(live.repeat.scheduledTime)}` : ''}`
-      }), { TTL: deliveryTTL(live, sendTime) });
+        keys: { p256dh: currentDevice.p256dh, auth: currentDevice.auth } }, JSON.stringify(repeatNotificationPayload(live, env)), { TTL: deliveryTTL(live, sendTime) });
       await setStatus(env, key, "sent");
     } catch (error) {
       if ([404, 410].includes(error?.statusCode)) {
