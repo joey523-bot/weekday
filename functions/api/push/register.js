@@ -1,3 +1,4 @@
+import { accountNotificationPreferences } from "../../_utils/notification-sync.js";
 import { badRequest, json } from "../../_utils/http.js";
 import { normalizePushPayload } from "../../_utils/push.js";
 import { requireSession } from "../../_utils/auth.js";
@@ -23,6 +24,12 @@ export async function onRequestPost(context) {
     return badRequest("缺少完整的 push subscription");
   }
 
+  // The account snapshot is authoritative; stale/old devices cannot restore local settings.
+  const shared = await accountNotificationPreferences(context.env.DB, session.session.user_id);
+  if (shared) {
+    payload.reminderHour = shared.hour;
+    payload.dailyCountdownEnabled = shared.dailyCountdownEnabled;
+  }
   const now = new Date().toISOString();
   const userAgent = context.request.headers.get("user-agent") || "";
 

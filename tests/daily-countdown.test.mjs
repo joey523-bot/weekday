@@ -122,7 +122,7 @@ test('daily switch off leaves scheduled salary and ordinary reminders active',as
   let pending;await worker.scheduled({},f.env,{waitUntil(p){pending=p;}});await pending;
   assert.deepEqual(f.sent.map(p=>p.tag).sort(),['reminder-r-2026-09-30','salary-2026-09-30'].sort());
 });
-test('daily preference is device-local, defaults off for old state and survives account sync/reload',async t=>{
+test('daily preference follows account sync, defaults off and survives reload',async t=>{
   const storage=new Map();
   globalThis.localStorage = {getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
   globalThis.window = {dispatchEvent(){}};
@@ -131,9 +131,9 @@ test('daily preference is device-local, defaults off for old state and survives 
   assert.equal(state.getState().salary.notification.dailyCountdownEnabled,false);
   state.updateSalary({notification:{...state.getState().salary.notification,dailyCountdownEnabled:true}});
   state.replaceSyncedData({salary:{notification:{leadDays:2,dailyCountdownEnabled:false}}});
-  assert.equal(state.getState().salary.notification.dailyCountdownEnabled,true);
-  assert.equal(state.getSyncSnapshot().salary.notification.dailyCountdownEnabled,undefined);
+  assert.equal(state.getState().salary.notification.dailyCountdownEnabled,false);
+  assert.equal(state.getSyncSnapshot().salary.notification.dailyCountdownEnabled,false);
   const reload=await import(`../scripts/state.js?daily-reload=${Date.now()}`);
-  assert.equal(reload.getState().salary.notification.dailyCountdownEnabled,true);
+  assert.equal(reload.getState().salary.notification.dailyCountdownEnabled,false);
   reload.clearAccountData();assert.equal(reload.getState().salary.notification.dailyCountdownEnabled,false);
 });

@@ -500,7 +500,9 @@ export function replaceSyncedData(payload) {
       ...(payload?.salary || {}),
       notification: {
         ...state.salary.notification,
-        leadDays: payload?.salary?.notification?.leadDays ?? state.salary.notification.leadDays
+        leadDays: payload?.salary?.notification?.leadDays ?? state.salary.notification.leadDays,
+        hour: payload?.salary?.notification?.hour ?? state.salary.notification.hour,
+        dailyCountdownEnabled: payload?.salary?.notification?.dailyCountdownEnabled ?? state.salary.notification.dailyCountdownEnabled
       }
     },
     reminders: Array.isArray(payload?.reminders) ? payload.reminders : state.reminders,
@@ -539,13 +541,15 @@ export function setNickname(nickname) {
 export function getSyncSnapshot() {
   return {
     version: 1,
-    capabilities: { repeat: 3 },
+    capabilities: { repeat: 3, notifications: 1 },
     salary: {
       day: state.salary.day,
       amount: state.salary.amount,
       account: state.salary.account,
       notification: {
-        leadDays: state.salary.notification.leadDays
+        leadDays: state.salary.notification.leadDays,
+        hour: state.salary.notification.hour,
+        dailyCountdownEnabled: state.salary.notification.dailyCountdownEnabled
       }
     },
     reminders: state.reminders,

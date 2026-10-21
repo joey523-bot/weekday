@@ -520,6 +520,14 @@ function bindEvents(refs) {
     setActiveView(refs, "reminders");
   });
 
+  refs.pushHourSelect.addEventListener("change", async () => {
+    updateSalary({ notification: { ...getState().salary.notification, hour: Number(refs.pushHourSelect.value) } });
+    try {
+      await flushAccountSync();
+      await syncExistingPushSubscription(refs);
+    } catch(error) { refs.dailyCountdownNote.textContent = error.message; }
+  });
+
   refs.dailyCountdownInput.addEventListener("change", async () => {
     refs.dailyCountdownInput.dataset.syncing = "true";
     refs.dailyCountdownInput.disabled = true;
@@ -528,7 +536,10 @@ function bindEvents(refs) {
         ...getState().salary.notification,
         dailyCountdownEnabled: refs.dailyCountdownInput.checked
       } });
+      await flushAccountSync();
       await syncExistingPushSubscription(refs);
+    } catch(error) {
+      refs.dailyCountdownNote.textContent = error.message;
     } finally {
       delete refs.dailyCountdownInput.dataset.syncing;
       renderAll(refs);
@@ -1380,6 +1391,7 @@ async function syncExistingPushSubscription(refs) {
   }
 
   try {
+    if (activeAccount) await flushAccountSync();
     const result = await syncSalaryPushRule({
       day: getState().salary.day,
       leadDays: notification.leadDays,
@@ -1426,6 +1438,7 @@ async function enablePushAndSync(refs) {
   renderAll(refs);
 
   try {
+    if (activeAccount) await flushAccountSync();
     const result = await enableSalaryPushNotifications({
       day: state.salary.day,
       leadDays: nextNotification.leadDays,

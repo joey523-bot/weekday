@@ -1,3 +1,4 @@
+import { accountNotificationPreferences } from "../../../functions/_utils/notification-sync.js";
 import { dailyNotificationPayload } from "./push-payloads.js";
 import { diagnosticPush } from "./diagnostic.js";
 import { CLOCKOUT_SELECT, processClockoutAccount } from "./clockout.js";
@@ -21,6 +22,7 @@ export default {
       `
         SELECT
           installation_id,
+          user_id,
           endpoint,
           p256dh,
           auth,
@@ -66,7 +68,7 @@ export default {
         FROM salary_daily_push_rules rules
         INNER JOIN salary_push_subscriptions subscriptions
           ON subscriptions.installation_id = rules.installation_id
-        WHERE rules.enabled = 1 AND subscriptions.enabled = 1
+        WHERE subscriptions.enabled = 1
       `).all(),
       env.DB.prepare(`SELECT * FROM reminder_snoozes WHERE active=1 AND next_at<=?
         AND (mode='once' OR until_at>?)`).bind(new Date().toISOString(), new Date().toISOString()).all(),
@@ -97,6 +99,8 @@ export default {
 
 // Daily countdown has its own opt-in and delivery key. Existing salary/reminder rules are untouched.
 export async function processDailyCountdownEntry(entry, env, now = new Date()) {
+  const shared = await accountNotificationPreferences(env.DB, entry.user_id);
+  if (shared) entry = { ...entry, daily_enabled: shared.dailyCountdownEnabled ? 1 : 0 };
   if (Number(entry.daily_enabled) !== 1 || Number(entry.enabled) !== 1) return;
   const local = getLocalParts(now, FIXED_TIMEZONE);
   // Cron runs every five minutes; allow retries during the 10:00 hour only.
@@ -118,7 +122,9 @@ export async function processDailyCountdownEntry(entry, env, now = new Date()) {
   const claim = await env.DB.prepare(`
     UPDATE salary_daily_push_rules
     SET last_sent_key = ?, updated_at = ?
-    WHERE installation_id = ? AND enabled = 1 AND last_sent_key != ?
+    WHERE installation_id = ? AND last_sent_key != ?
+      AND COALESCE((SELECT json_extract(a.snapshot_data,'$.salary.notification.dailyCountdownEnabled')
+        FROM account_sync a JOIN salary_push_subscriptions s ON s.user_id=a.user_id WHERE s.installation_id=salary_daily_push_rules.installation_id),enabled)=1
       AND EXISTS (SELECT 1 FROM salary_push_subscriptions
         WHERE installation_id = ? AND enabled = 1)
   `).bind(cycleKey, stamp, entry.installation_id, cycleKey, entry.installation_id).run();
@@ -155,6 +161,8 @@ export async function processDailyCountdownEntry(entry, env, now = new Date()) {
 }
 
 export async function processSalaryEntry(entry, env, now = new Date()) {
+  const shared = await accountNotificationPreferences(env.DB, entry.user_id);
+  if (shared) entry = { ...entry, reminder_hour: shared.hour };
   const local = getLocalParts(now, entry.timezone || FIXED_TIMEZONE);
   if (local.hour !== Number(entry.reminder_hour ?? 9)) {
     return;

@@ -316,7 +316,7 @@ export function createShell() {
                 <button id="pushTestButton" class="button button--secondary" type="button">测试通知</button>
                 <button id="pushDisableButton" class="button button--secondary" type="button">关闭本机通知</button>
               </div>
-              <p id="dailyCountdownNote" class="form-note">默认关闭，仅本设备生效。开启后按北京时间在实际工作日10:00提醒，含调休；不影响原工资和事项提醒。未开启通知时，请先开启通知并同步。</p>
+              <p id="dailyCountdownNote" class="form-note">开关与工资推送时刻跟随账号同步；通知权限和本机接收独立。开启后按北京时间在实际工作日10:00提醒，含调休；不影响原工资和事项提醒。未开启通知时，请先开启通知并同步。</p>
               <p id="pushSyncState" class="form-note">--</p>
             </article>
 

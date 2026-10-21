@@ -231,7 +231,7 @@ export function renderPushPanel(state, refs, capabilities) {
   refs.pushLeadDaysInput.value = String(notification.leadDays);
   refs.pushHourSelect.value = String(notification.hour);
   refs.dailyCountdownInput.checked = notification.dailyCountdownEnabled === true;
-  refs.dailyCountdownInput.disabled = !capabilities.supported || refs.dailyCountdownInput.dataset.syncing === "true";
+  refs.dailyCountdownInput.disabled = refs.dailyCountdownInput.dataset.syncing === "true";
   refs.pushPermissionLabel.textContent = permissionText;
   refs.pushEnableButton.textContent = notification.enabled ? "重新同步提醒" : "开启通知并同步";
   refs.pushEnableButton.disabled = !capabilities.supported;

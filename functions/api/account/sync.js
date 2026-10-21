@@ -1,3 +1,4 @@
+import { initializeNotificationPreferences, preserveNotificationPreferences } from "../../_utils/notification-sync.js";
 import { validateRepeatSnapshot } from "../../_utils/repeat-sync.js";
 import { preserveMissingOccurrences } from "../../_utils/occurrence-sync.js";
 import { preserveMissingCategories } from "../../_utils/category-sync.js";
@@ -10,6 +11,7 @@ export async function onRequestGet(context) {
   const result = await requireSession(context);
   if (result.response) return result.response;
   try {
+    await initializeNotificationPreferences(context.env.DB, result.session.user_id);
     const record = await context.env.DB.prepare("SELECT snapshot_data, revision, updated_at FROM account_sync WHERE user_id = ?").bind(result.session.user_id).first();
     if (!record) return json({ ok: true, revision: 0, snapshot: null, updatedAt: "" });
     return json({ ok: true, revision: Number(record.revision), snapshot: parseSnapshot(record.snapshot_data), updatedAt: record.updated_at });
@@ -29,7 +31,7 @@ export async function onRequestPut(context) {
     const stored = await context.env.DB.prepare("SELECT snapshot_data FROM account_sync WHERE user_id = ? AND revision = ?")
       .bind(result.session.user_id, revision).first();
     const previous = stored ? parseSnapshot(stored.snapshot_data) : null;
-    try { snapshot = validateRepeatSnapshot(snapshot, previous); }
+    try { snapshot = preserveNotificationPreferences(validateRepeatSnapshot(snapshot, previous), previous); }
     catch (error) { return badRequest(error.message, error.status || 400); }
     if (!Object.hasOwn(snapshot.preferences?.cycle || {}, 'pushEnabled') || !Object.hasOwn(snapshot.preferences || {}, 'cycle') || !Object.hasOwn(snapshot.preferences || {}, 'customCategories') || snapshot.reminders?.some(item => !Object.hasOwn(item, 'occurredOn'))) {
       if (!Object.hasOwn(snapshot.preferences || {}, 'cycle')) snapshot = { ...snapshot, preferences: {
