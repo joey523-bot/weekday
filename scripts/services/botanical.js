@@ -4,8 +4,8 @@ export function validPlant(p){return p&&typeof p.title==='string'&&typeof p.summ
 export function readBotanicalCache(){try{const c=JSON.parse(localStorage.getItem(key));return validPlant(c?.plant)&&typeof c.day==='string'?c:null;}catch{return null;}}
 export async function fetchBotanical(exclude=''){
  const r=await fetch('/api/botanical/today?'+new URLSearchParams({exclude}),{signal:AbortSignal.timeout(25000),cache:'no-store'});
- if(!r.ok)throw Error('花草资料暂时连接不上');const {plant}=await r.json();
+ if(!r.ok)throw Error('花草资料暂时连接不上');const {plant,cached=false,collectedAt}=await r.json();
  if(!validPlant(plant)||plant.title===exclude)throw Error('暂时没有新的花草');
- const value={day:botanicalDay(),plant};let persisted=true;try{localStorage.setItem(key,JSON.stringify(value));}catch{persisted=false;}
+ const value={day:botanicalDay(),plant,cached,collectedAt};let persisted=true;try{localStorage.setItem(key,JSON.stringify(value));}catch{persisted=false;}
  return {...value,persisted};
 }
