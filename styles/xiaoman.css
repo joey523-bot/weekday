@@ -1396,3 +1396,12 @@ textarea:focus-visible {
     transform: none !important;
   }
 }
+
+/* Wide windows use the available workspace; phone rules remain unchanged. */
+@media (min-width: 760px) {
+  :root { --page-width: 1120px; }
+  .app-shell { padding-inline: 32px; }
+  .bottom-tabs { max-width: 1056px; }
+  .workspace, .view { min-width: 0; }
+  .view > * { min-width: 0; }
+}
