@@ -357,7 +357,7 @@ body {
 
 .date-input-shell:focus-within {
   border-color: var(--accent);
-  outline: 3px solid rgba(30, 89, 71, 0.16);
+  outline: 3px solid var(--field-focus-ring, rgba(30, 89, 71, 0.16));
 }
 
 .date-input-shell__value {

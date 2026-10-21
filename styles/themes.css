@@ -1,4 +1,75 @@
 /* User-selectable appearance themes and their settings UI. */
+/* A theme supplies visual tokens only. Structure and interaction stay shared. */
+html[data-theme="clear"] {
+  color-scheme: light;
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-muted: #f0f4fa;
+  --text: #202d43;
+  --text-muted: #5f6d83;
+  --text-soft: #65738a;
+  --text-inverse: #ffffff;
+  --accent: #2867df;
+  --accent-strong: #245dcc;
+  --accent-soft: #eaf1ff;
+  --accent-warm: #946000;
+  --accent-warm-soft: #fff3d7;
+  --danger: #b33e4d;
+  --line: #e7ecf3;
+  --line-strong: #d5ddea;
+  --shadow-sm: 0 2px 8px rgb(37 62 102 / 3%);
+  --shadow-md: 0 8px 32px rgb(37 62 102 / 6%);
+  --radius-lg: 18px;
+  --radius-xl: 20px;
+  --radius-2xl: 22px;
+  --tabbar-height: 72px;
+  --body-background: var(--bg);
+  --brand-size: 23px;
+  --brand-mark-size: 28px;
+  --header-height: 60px;
+  --header-margin: 4px;
+  --add-button-size: 44px;
+  --add-button-padding: 12px;
+  --add-button-shadow: none;
+  --add-button-color: var(--text-inverse);
+  --add-button-background: var(--accent-strong);
+  --home-greeting-size: clamp(21px, 5.6vw, 28px);
+  --snapshot-background: var(--surface);
+  --snapshot-foreground: var(--text);
+  --snapshot-border: var(--line);
+  --snapshot-shadow: var(--shadow-sm);
+  --snapshot-texture-opacity: 0;
+  --salary-label-color: var(--text-muted);
+  --salary-number-color: var(--accent);
+  --salary-date-color: var(--text-muted);
+  --countdown-card-height: 172px;
+  --countdown-card-radius: var(--radius-2xl);
+  --clockout-background: #eaf1ff;
+  --clockout-digit-background: transparent;
+  --clockout-digit-color: var(--accent-strong);
+  --clockout-digit-shadow: none;
+  --clockout-digit-padding: 10px 0;
+  --clockout-digit-size: clamp(20px, 6.1vw, 32px);
+  --moon-background: var(--surface);
+  --moon-padding: 14px 16px;
+  --moon-radius: var(--radius-lg);
+  --nudge-background: var(--surface);
+  --nudge-border: var(--line);
+  --nav-radius: 26px;
+  --nav-block-padding: 6px;
+  --nav-inline-padding: 8px;
+  --nav-shadow: 0 6px 28px rgb(37 62 102 / 9%);
+  --nav-item-radius: 20px;
+  --nav-active-fill: #d5e4ff;
+  --focus-ring: rgb(40 103 223 / 36%);
+  --field-focus-ring: rgb(40 103 223 / 16%);
+  --action-hover: #1d50b6;
+  --weather-start: #3475d9;
+  --weather-end: #2057af;
+  --weather-highlight: #ffe4a0;
+}
+
 html[data-theme="twinkle"] {
   color-scheme: light;
   --bg: #f5f1ff;
@@ -249,6 +320,29 @@ html[data-theme="jay"] .weather-page-card > .weather-privacy {
 
 .theme-option--forest .theme-option__preview {
   background: linear-gradient(145deg, #246b54, #0d3026);
+}
+
+.theme-option--clear .theme-option__preview {
+  background: #edf2fb;
+  border: 1px solid #dce5f3;
+}
+
+.theme-option--clear .theme-option__preview::before {
+  position: absolute;
+  inset: 10px 10px 25px;
+  border: 1px solid #e1e8f4;
+  border-radius: 10px;
+  background: #fff;
+  content: "";
+}
+
+.theme-option--clear .theme-option__preview::after {
+  position: absolute;
+  inset: auto 10px 10px;
+  height: 9px;
+  border-radius: 6px;
+  background: #2867df;
+  content: "";
 }
 
 .theme-option--forest .theme-option__preview::before {

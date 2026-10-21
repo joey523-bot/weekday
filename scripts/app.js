@@ -841,9 +841,9 @@ function setActiveView(refs, nextView, { scroll = true } = {}) {
   }
 
   if (scroll) {
-    window.scrollTo({
+    document.querySelector('.workspace')?.scrollTo({
       top: 0,
-      behavior: "smooth"
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? "instant" : "smooth"
     });
   }
 }

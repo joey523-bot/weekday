@@ -1,11 +1,11 @@
 /* UI-001: preserve existing theme tokens and interaction controls. */
-.compact-app-header { margin-bottom: 12px; }
+.compact-app-header { margin-bottom: var(--header-margin, 12px); }
 .overview-intro { padding: 0 0 20px; }
 .home-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #homeDate { color: var(--text-muted); font-size: 13px; }
 #homeWeather { border: 0; padding: 4px 0 4px 8px; color: var(--text-muted); background: transparent; text-align: right; font-size: 13px; }
 #homeWeather small { display: block; margin-top: 3px; font-size: 11px; }
-.overview-intro #homeGreeting { margin: 18px 0 0; font-size: clamp(22px, 5.7vw, 30px); line-height: 1.4; letter-spacing: -.02em; }
+.overview-intro #homeGreeting { margin: 18px 0 0; font-size: var(--home-greeting-size, clamp(22px, 5.7vw, 30px)); line-height: 1.4; letter-spacing: -.02em; }
 .salary-snapshot.salary-compact { padding: 18px 22px; min-height: 0; border-radius: 22px; cursor: pointer; }
 .salary-compact .salary-snapshot__main { margin-top: 4px; align-items: center; }
 .salary-compact .salary-snapshot__countdown strong { font-size: 48px; line-height: 1.1; }
@@ -13,7 +13,7 @@
 .salary-compact .salary-snapshot__date { position: static; margin-left: auto; font-size: 14px; }
 .salary-compact #salaryStatus { font-size: 11px; }
 .salary-compact::after { width: 130px; height: 130px; }
-.home-moon { display:flex; align-items:center; gap:12px; width:100%; padding:12px 4px; border:0; background:transparent; color:var(--text); text-align:left; }
+.home-moon { display:flex; align-items:center; gap:12px; width:100%; padding:var(--moon-padding, 12px 4px); border:0; border-radius:var(--moon-radius, 0); background:var(--moon-background, transparent); color:var(--text); text-align:left; }
 .home-moon > span:last-child { margin-left:auto; }
 .home-moon small { display:block; margin-top:5px; font-size:12px; color:var(--text-muted); }
 .moon-picture { width:64px; height:64px; flex-shrink:0; }
@@ -36,18 +36,57 @@
 .settings-entry:last-child { border-bottom:0; }
 .settings-entry small { display:block; color:var(--text-muted); font-size:12px; line-height:1.5; margin-top:6px; }
 .lifestyle-dialog,.reminder-detail { position:fixed; inset:0; margin:auto; width:min(460px,calc(100vw - 32px)); max-width:calc(100vw - 32px); max-height:85vh; max-height:85dvh; box-sizing:border-box; border:1px solid var(--line); border-radius:24px; color:var(--text); background:var(--surface-strong); overflow:auto; }
-.lifestyle-dialog { padding:0; }
+.lifestyle-dialog { padding:0; overflow:hidden; }
+.lifestyle-dialog[open] { display:flex; flex-direction:column; animation:settings-open 220ms cubic-bezier(.22,.8,.25,1); }
+.lifestyle-dialog-head { flex-shrink:0; }
 .lifestyle-dialog::backdrop { background:rgb(0 0 0 / 35%); }
-.lifestyle-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:12px; position:sticky; top:0; z-index:2; padding:12px 16px 8px 24px; background:var(--surface-strong); }
+.lifestyle-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:12px; z-index:2; padding:16px 16px 8px 24px; background:var(--surface-strong); }
 .lifestyle-dialog-head h2 { margin:0; font-size:19px; }
 .lifestyle-close { display:grid; place-items:center; flex-shrink:0; width:44px; height:44px; border:0; border-radius:50%; background:transparent; color:var(--text-muted); font-size:26px; line-height:1; cursor:pointer; }
 .lifestyle-close:focus-visible,.salary-compact:focus-visible,.settings-entry:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
-.lifestyle-dialog-body { padding:8px 24px 24px; overflow-wrap:anywhere; }
-.lifestyle-dialog-body > .journal-card { padding:0; border:0; background:transparent; box-shadow:none; }
+.lifestyle-dialog-body { min-height:0; overflow-y:auto; overscroll-behavior-y:contain; padding:12px 24px 24px; overflow-wrap:anywhere; scrollbar-width:thin; }
+.lifestyle-dialog-body > .journal-card { display:grid; gap:18px; min-width:0; margin:0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; overflow:visible; }
 .lifestyle-dialog-body .card-heading h2,.lifestyle-dialog-body > .journal-card > h2 { display:none; }
 .lifestyle-dialog-body .salary-snapshot__details { margin:0; padding:8px 0; color:var(--text); display:grid; gap:20px; }
 .lifestyle-dialog-body .salary-snapshot__details strong { color:var(--text); overflow-wrap:anywhere; }
-.lifestyle-dialog-body .data-note { padding:0; }
+.lifestyle-dialog-body .data-note { display:block; margin:0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.lifestyle-dialog-body .data-note__icon { display:none; }
+.lifestyle-dialog-body .card-heading { align-items:flex-start; gap:12px; }
+.lifestyle-dialog-body .card-heading > div { min-width:0; }
+.lifestyle-dialog-body .card-heading p { margin:0; font-size:13px; line-height:1.6; }
+.lifestyle-dialog-body .stack-form { margin-top:0; gap:16px; }
+.lifestyle-dialog-body .field { gap:8px; }
+.lifestyle-dialog-body [role=status]:empty { display:none; }
+.lifestyle-dialog-body .field__label { color:var(--text); font-weight:600; }
+.lifestyle-dialog-body input:not([type=checkbox]), .lifestyle-dialog-body select, .lifestyle-dialog-body textarea { font-size:16px; }
+.lifestyle-dialog-body input[type=checkbox] { width:20px; height:20px; margin:0; accent-color:var(--accent); flex-shrink:0; }
+.settings-toggle { display:flex; align-items:center; gap:12px; min-height:52px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-muted); color:var(--text); line-height:1.5; }
+.lifestyle-dialog-body .settings-list { gap:0; border:1px solid var(--line); border-radius:var(--radius-md); overflow:hidden; }
+.lifestyle-dialog-body .settings-list__row { display:grid; grid-template-columns:minmax(0,1fr) 104px; align-items:center; gap:12px; min-height:64px; padding:12px 14px; border:0; border-bottom:1px solid var(--line); border-radius:0; }
+.lifestyle-dialog-body .settings-list__row:last-child { border-bottom:0; }
+.lifestyle-dialog-body .settings-list__label { font-size:13px; line-height:1.5; font-weight:500; }
+.lifestyle-dialog-body .settings-list__input { width:100%; }
+.lifestyle-dialog-body .settings-list__row > input[type=checkbox], .lifestyle-dialog-body .settings-list__row > span:last-child:not(:first-child) { justify-self:end; }
+.lifestyle-dialog-body .notification-panel__actions { display:grid; gap:10px; }
+.lifestyle-dialog-body .button { min-height:44px; }
+.lifestyle-dialog-body details { border:1px solid var(--line); border-radius:var(--radius-sm); padding:0 14px; }
+.lifestyle-dialog-body summary { min-height:48px; padding:12px 0; line-height:1.5; cursor:pointer; }
+.lifestyle-dialog-body details[open] > :not(summary) { margin-bottom:14px; }
+.lifestyle-dialog-body details .field + .field { margin-top:12px; }
+.lifestyle-dialog-body .cycle-exclusion { display:flex; align-items:flex-start; gap:10px; min-height:44px; font-size:13px; line-height:1.5; }
+.lifestyle-dialog-body .cycle-exclusion input { margin-top:1px; }
+.lifestyle-dialog-body .cycle-group { margin-block:12px; padding-block:8px; border-bottom:1px solid var(--line); }
+#changePasswordForm { padding-bottom:20px; border-bottom:1px solid var(--line); }
+#logoutButton { border:1px solid color-mix(in srgb,var(--danger) 25%,transparent); color:var(--danger); background:color-mix(in srgb,var(--danger) 6%,var(--surface)); }
+#settingsHelp .lifestyle-dialog-body { display:grid; gap:20px; }
+#settingsHelp .data-note h2 { font-size:15px; line-height:1.5; }
+#settingsHelp .data-note p { margin-block:10px; font-size:13px; line-height:1.65; }
+#settingsHelp .maintenance-actions { display:grid; gap:10px; }
+#settingsHelp .button { width:100%; }
+.settings-entry, .lifestyle-close, .lifestyle-dialog-body .button { transition:background-color 140ms ease, opacity 100ms ease; }
+.settings-entry:active, .lifestyle-close:active, .lifestyle-dialog-body .button:active:not(:disabled) { opacity:.65; }
+@keyframes settings-open { from { opacity:0; transform:translateY(12px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
+@media(prefers-reduced-motion:reduce) { .lifestyle-dialog[open] { animation:none; } }
 #occurrenceDialog form { position:relative; padding-top:26px; }
 #occurrenceCancel { position:absolute; right:-14px; top:-16px; }
 .reminder-time-group { min-width:0; }
@@ -63,20 +102,20 @@
 #clockoutDetail .button-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-block:16px; }
 
 .countdown-duo { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
-.countdown-duo .salary-snapshot.salary-compact, #homeClockout { box-sizing:border-box; width:100%; min-width:0; height:190px; border-radius:22px; padding:20px 16px; margin:0; display:flex; flex-direction:column; justify-content:space-between; align-items:stretch; text-align:left; }
+.countdown-duo .salary-snapshot.salary-compact, #homeClockout { box-sizing:border-box; width:100%; min-width:0; height:var(--countdown-card-height, 190px); border-radius:var(--countdown-card-radius, 22px); padding:20px 16px; margin:0; display:flex; flex-direction:column; justify-content:space-between; align-items:stretch; text-align:left; }
 .countdown-duo .salary-snapshot__eyebrow,.clockout-heading { font-size:16px; font-weight:600; margin:0; }
 .countdown-duo #salaryStatus,.countdown-duo .salary-snapshot__calendar { display:none; }
 .countdown-duo .salary-snapshot__main { display:contents; }
 .countdown-duo .salary-snapshot__countdown strong { font-size:52px; }
 .countdown-duo .salary-snapshot__countdown { margin:0; }
 .countdown-duo .salary-snapshot__date { margin:0; font-size:12px; }
-#homeClockout { background:var(--accent-soft,#e4f0e9); color:var(--text); gap:0; }
+#homeClockout { background:var(--clockout-background, var(--accent-soft,#e4f0e9)); color:var(--text); gap:0; }
 #homeClockout > span:last-child { margin-left:0; }
 .clockout-digits { display:flex; align-items:center; justify-content:center; gap:3px; width:100%; }
-.clockout-digits [data-digit] { position:relative; flex:1; min-width:0; text-align:center; padding:10px 1px; color:#f4faf6; background:#154b3d; border-radius:6px; font-size:clamp(17px,5.8vw,29px); font-weight:600; font-variant-numeric:tabular-nums; line-height:1.3; box-shadow:0 2px 3px #123b3025; }
+.clockout-digits [data-digit] { position:relative; flex:1; min-width:0; text-align:center; padding:var(--clockout-digit-padding, 10px 1px); color:var(--clockout-digit-color, #f4faf6); background:var(--clockout-digit-background, #154b3d); border-radius:6px; font-size:var(--clockout-digit-size, clamp(17px,5.8vw,29px)); font-weight:600; font-variant-numeric:tabular-nums; line-height:1.3; box-shadow:var(--clockout-digit-shadow, 0 2px 3px #123b3025); }
 .clockout-digits b { font-size:15px; font-weight:500; }
 .clockout-footer { font-size:12px; color:var(--text-muted); }
 .clockout-message { font-size:16px; font-weight:500; overflow-wrap:anywhere; }
-@media(max-width:360px){.countdown-duo{gap:9px}.countdown-duo .salary-snapshot.salary-compact,#homeClockout{padding:18px 12px;height:178px}.clockout-digits{gap:2px}.countdown-duo .salary-snapshot__eyebrow,.clockout-heading{font-size:14px}}
+@media(max-width:360px){.countdown-duo{gap:9px}.countdown-duo .salary-snapshot.salary-compact,#homeClockout{padding:18px 12px;height:var(--countdown-card-height, 178px)}.clockout-digits{gap:2px}.countdown-duo .salary-snapshot__eyebrow,.clockout-heading{font-size:14px}}
 .countdown-duo .salary-snapshot__date { align-self:flex-start; text-align:left; }
 .countdown-duo .salary-snapshot__countdown { justify-content:flex-start; text-align:left; }
