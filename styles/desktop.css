@@ -1,0 +1,64 @@
+/* Desktop life dashboard; phone/tablet retain their original layout and interactions. */
+.desktop-only { display:none; }
+@media(min-width:1100px){
+ :root { --page-width:1920px; }
+ .app-shell { padding:12px 28px 20px; height:auto; min-height:100dvh; overflow:visible; }
+ .app-header.compact-app-header {min-height:62px;padding:0 0 14px;border-bottom:1px solid var(--line);gap:20px;}
+ .app-header .brand {font-size:25px;gap:10px;}.app-header .brand__mark {width:32px;height:32px;}
+ .app-header > .icon-button {display:none;}
+ .desktop-only {display:block;}
+ .desktop-nav {display:flex;gap:10px;margin-left:auto;}
+ .desktop-nav button,.desktop-card header button {border:0;background:var(--surface-muted);color:var(--text);border-radius:12px;padding:9px 14px;font:inherit;cursor:pointer;}
+ .workspace {overflow:visible;padding:0;flex:none;}
+ .bottom-tabs {display:none;}
+ .view--overview {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:18px 22px;align-items:stretch;}
+ .view--overview[hidden]{display:none!important;}
+ .overview-stack {display:contents;}
+ .view--overview > .overview-intro {grid-column:1;grid-row:1;align-self:center;margin:18px 0;}
+ .home-topline {justify-content:flex-start;margin-bottom:8px;}.home-topline #homeWeather {display:none;}
+ #homeGreeting {font-size:clamp(25px,2.25vw,38px);margin:0;}
+ .countdown-duo {grid-column:2;grid-row:1;align-self:center;gap:12px;margin:16px 0;}
+ .countdown-duo .salary-snapshot.salary-compact,#homeClockout {height:112px;min-height:112px;padding:14px 18px;border-radius:18px;background:var(--surface-muted);color:var(--text);border:1px solid var(--line);box-shadow:none;}
+ .countdown-duo .salary-snapshot::after {display:none;}
+ .countdown-duo .salary-snapshot__eyebrow,.clockout-heading {font-size:13px;color:var(--text-muted);}
+ .countdown-duo .salary-snapshot__countdown strong {font-size:38px;color:var(--text);}
+ .countdown-duo .salary-snapshot__main {justify-content:flex-start;gap:10px;margin:0;}
+ .countdown-duo .salary-snapshot__date {display:none;}
+ .countdown-duo .salary-snapshot__countdown {justify-content:flex-start;}
+ .clockout-digits {justify-content:flex-start;gap:3px;}
+ .clockout-digits [data-digit] {padding:0;background:transparent;color:var(--text);font-size:32px;box-shadow:none;flex:0 1 auto;}
+ .clockout-digits b {font-size:24px;}.clockout-footer {font-size:11px;}
+ #homeMoon {display:none;}
+ .desktop-card {padding:20px 22px;border:1px solid var(--line);border-radius:20px;background:var(--surface-strong);min-width:0;}
+ .desktop-card header {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;}
+ .desktop-card h2 {font-size:20px;line-height:1.4;margin:0;font-weight:600;}
+ .desktop-card header button {font-size:13px;padding:6px 12px;}
+ .desktop-botanical {grid-column:1;grid-row:2/4;}
+ .desktop-botanical figure {margin:0;}.desktop-botanical img {width:100%;height:clamp(240px,31vh,420px);object-fit:cover;border-radius:12px;background:var(--surface-muted);}
+ .desktop-botanical h3 {font-size:28px;margin:14px 0 8px;}.desktop-botanical h3 small {font-size:13px;font-weight:400;color:var(--text-muted);}
+ .desktop-botanical p {margin:6px 0;line-height:1.7;}.desktop-plant-line {font-size:19px;}
+ .desktop-botanical details {font-size:11px;color:var(--text-muted);margin-top:10px;}.desktop-botanical summary {cursor:pointer;}
+ .desktop-botanical a {text-decoration:underline;}.desktop-plant-state {font-size:12px;color:var(--text-muted);min-height:18px;}
+ .desktop-weather {grid-column:2;grid-row:2;}
+ .desktop-weather-current {display:flex;align-items:center;gap:20px;}.desktop-weather-current > strong {font-size:52px;line-height:1.2;font-weight:600;}.desktop-weather-current p {margin:3px 0;color:var(--text-muted);}
+ .desktop-weather-lines {margin:12px 0;}.desktop-weather-lines > div {display:grid;grid-template-columns:80px 1fr;gap:12px;border-top:1px solid var(--line);padding:8px 0;font-size:13px;}.desktop-weather-lines dd {margin:0;}.desktop-weather-lines dt {color:var(--text-muted);}
+ .desktop-hours {display:flex;justify-content:space-between;gap:12px;}.desktop-hours > div {display:grid;gap:3px;}.desktop-hours span,.desktop-hours small {font-size:12px;color:var(--text-muted);}.desktop-weather-updated {font-size:11px;color:var(--text-muted);margin:8px 0 0;}
+ .desktop-moon {grid-column:2;grid-row:3;background:var(--surface-muted);}
+ .desktop-moon .moon-heading {margin:6px 0 12px;gap:20px;}.desktop-moon .moon-picture {width:86px;height:86px;}.desktop-moon h3 {font-size:23px;}
+ .desktop-moon .moon-metrics {margin:0;gap:10px;}.desktop-moon .moon-metrics > div:nth-child(n+3),.desktop-moon #desktopMoonBody:has(.moon-heading) > .form-note {display:none;}
+ #board {grid-column:1/-1;grid-row:4;margin:0;padding:14px 20px;border-radius:18px;}
+ #board .section-head {margin-bottom:8px;}#board .section-title {font-size:17px;}#board .section-head__meta,#overviewReminderCount {display:none;}
+ #overviewReminderList {display:flex;flex-wrap:wrap;gap:8px 24px;}#overviewReminderList > * {flex:1 1 300px;min-width:0;border:0;padding:10px 0;}
+ #board .reminder-item__icon {display:none;}#board .reminder-item__title {font-size:14px;}
+ #cycleSuggestions,#cycleFeedback,#pushNudge {grid-column:1/-1;}
+ .view--settings,.view--weather,.view--reminders,.view--compose {max-width:1100px;margin:24px auto;width:100%;}
+}
+
+@media(min-width:1100px){.countdown-duo .salary-snapshot__countdown span{color:var(--text);} .desktop-botanical figcaption>p{max-width:70ch;} .desktop-plant-state{margin-bottom:0;} }
+@media(min-width:1100px){
+ #board .reminder-item__notes,#board .reminder-item__repeat,#board .repeat-management-note{display:none;}
+ #board .reminder-item__meta,#board .reminder-item__notification{font-size:12px;margin:3px 0;}
+ .desktop-botanical figcaption>p{font-size:14px;line-height:1.8;}
+ .desktop-botanical h3{font-size:26px;}
+ .desktop-moon .moon-heading p{font-size:13px;}
+}

@@ -1,10 +1,13 @@
-const APP_VERSION = "20261021.notifications.1";
+const APP_VERSION = "20261021.desktop.1";
 const CACHE_NAME = `yoyuan-ledger-${APP_VERSION}`;
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./styles/main.css",
+  "./styles/desktop.css",
+  "./scripts/views/desktop.js",
+  "./scripts/services/botanical.js",
   "./styles/lifestyle.css",
   "./styles/repeat.css",
   "./scripts/utils/lifestyle.js",

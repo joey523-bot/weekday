@@ -1,3 +1,4 @@
+import { setupDesktop, renderDesktop } from './desktop.js';
 import { greetingFor, moonFor, clothingFor, isWeatherFresh } from '../utils/lifestyle.js';
 import { escapeHtml as esc, formatTemperature } from '../utils/format.js';
 import { WEATHER_CODES } from '../config.js';
@@ -28,6 +29,7 @@ export function setupLifestyle(root) {
   board.after(root.querySelector('#cycleSuggestions'),root.querySelector('#cycleFeedback'));
   overview.querySelector('.xm-weather-card')?.remove();
 
+  setupDesktop(root);
   const reminders=root.querySelector('[data-view=reminders]');reminders.querySelector('.page-intro').remove();
   reminders.querySelector('.section-head h2').textContent='事项';
   const settings=root.querySelector('[data-view=settings]');settings.querySelector('.page-intro p')?.remove();
@@ -83,5 +85,6 @@ export function renderLifestyle(state) {
  const moon=moonFor(candidate);const button=document.querySelector('#homeMoon');
  button.innerHTML=moon ? `${moonPicture(moon)}<span>追月亮 · ${esc(moon.name)}<small>月出 ${esc(timeLabel(moon.rise,moon.date))}</small></span><span aria-hidden="true">›</span>`:'<span>追月亮<small>更新天气，查看当地月相与月出</small></span><span aria-hidden="true">›</span>';
  document.querySelector('#moonDetailBody').innerHTML=renderMoon(candidate);
+ renderDesktop(state, renderMoon(candidate));
  document.querySelector('#settingsAccountSummary').textContent=[document.querySelector('#accountStatusBadge')?.textContent,document.querySelector('#accountUsername')?.textContent].filter(Boolean).join(' · ');
 }
