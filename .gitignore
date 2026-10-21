@@ -5,3 +5,4 @@ work/
 node_modules/
 .wrangler/
 workers/**/node_modules/
+output/playwright/

@@ -2,7 +2,7 @@ import { DEFAULT_SALARY_DAY } from "./utils/payday.js";
 
 export const STORAGE_KEY = "yoyuan-ledger:v2";
 export const INSTALLATION_KEY = "yoyuan-ledger:installation-id";
-export const APP_VERSION = "20261013.intraday.1";
+export const APP_VERSION = "20261020.appearance.1";
 
 export const APP_META = {
   productName: "星期",
@@ -16,6 +16,13 @@ export const APP_THEMES = {
     description: "清爽青绿，保持现在的外观",
     tag: "默认",
     themeColor: "#f4f7f5",
+    artwork: ""
+  },
+  clear: {
+    label: "清透蓝",
+    description: "浅灰白底、清透蓝与轻盈卡片",
+    tag: "清透",
+    themeColor: "#f4f6fa",
     artwork: ""
   },
   twinkle: {

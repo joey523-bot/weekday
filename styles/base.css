@@ -4,6 +4,11 @@
   box-sizing: border-box;
 }
 
+/* Layout classes must not override the native hidden state of controls. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   min-height: 100%;
   background: var(--bg);
