@@ -346,7 +346,7 @@ export function createShell() {
                 <button class="button button--secondary" type="submit">修改密码</button>
                 <p id="changePasswordState" class="form-note" aria-live="polite">忘记密码时可申请管理员协助找回。</p>
               </form>
-              <button id="logoutButton" class="button button--danger button--block" type="button">退出登录并清除此设备数据</button>
+              <button id="logoutButton" class="button button--danger button--block" type="button">退出登录</button>
             </article>
 
             <article class="data-note">

@@ -1,3 +1,4 @@
+import { chooseLogout, retainedAccountMatches } from "./views/logout.js";
 import { setupRecovery } from "./views/recovery.js";
 import { setupClockout } from "./views/clockout.js";
 import { updateClockout } from "./state.js";
@@ -125,6 +126,9 @@ async function boot() {
     return;
   }
 
+  const retainedOwner = localStorage.getItem("weekday-retained-account");
+  if (retainedOwner && retainedOwner !== session.user.phone) clearAccountData();
+  localStorage.removeItem("weekday-retained-account");
   activeAccount = session.user;
   startApplication(root);
 }
@@ -260,7 +264,8 @@ function bindAuthEvents(root) {
     submit.disabled = true;
     try {
       const result = await loginAccount({ phone: pendingPhone, password: root.querySelector("#loginPassword").value });
-      clearAccountData();
+      if (!retainedAccountMatches(localStorage, result.user.phone)) clearAccountData();
+      localStorage.removeItem("weekday-retained-account");
       activeAccount = result.user;
       await startApplication(root);
     } catch (error) {
@@ -278,6 +283,10 @@ function bindAuthEvents(root) {
     try {
       if (root.querySelector("#setupPassword").value !== root.querySelector("#setupPasswordConfirm").value) {
         throw new Error("两次输入的密码不一致");
+      }
+      if (localStorage.getItem("weekday-retained-account")) {
+        clearAccountData();
+        localStorage.removeItem("weekday-retained-account");
       }
       setNickname(root.querySelector("#nicknameInput").value);
       const result = await registerAccount({
@@ -450,15 +459,24 @@ function bindEvents(refs) {
   });
 
   refs.logoutButton.addEventListener("click", async () => {
-    if (!window.confirm("退出后会清除这台设备的本地数据与提醒订阅，确定继续吗？")) return;
+    const choice = await chooseLogout(root);
+    if (!choice) return;
     refs.logoutButton.disabled = true;
     try {
-      await disableSalaryPushNotifications().catch(() => {});
+      await flushAccountSync();
+      await disableSalaryPushNotifications();
       await logoutAccount();
-    } finally {
-      clearAccountData();
+      if (choice.clearDeviceData) {
+        clearAccountData();
+        localStorage.removeItem("weekday-retained-account");
+      } else {
+        localStorage.setItem("weekday-retained-account", activeAccount.phone);
+      }
       activeAccount = null;
       window.location.reload();
+    } catch (error) {
+      refs.changePasswordState.textContent = `退出尚未完成：${error.message}。请重试；若提醒已关闭，可在退出前重新开启。`;
+      refs.logoutButton.disabled = false;
     }
   });
 
