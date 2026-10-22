@@ -1,8 +1,10 @@
+import { setupAdminAccess } from "./admin-access.js";
 async function api(path,body){
  const r=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
  const data=await r.json();if(!r.ok)throw Error(data.error||'操作失败，请重试');return data;
 }
 export function setupRecovery(root){
+ setupAdminAccess(root);
  function dialog(title){
   const d=document.createElement('dialog');d.style.cssText='max-width:440px;width:calc(100% - 32px);max-height:85vh;overflow:auto;border:0;border-radius:16px;padding:24px';
   const h=document.createElement('h2');h.textContent=title;d.append(h);

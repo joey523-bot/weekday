@@ -223,6 +223,7 @@ function bindAuthEvents(root) {
   let pendingPhone = "";
 
   const showStep = (step) => {
+    root.querySelector(".auth-card__head h2").textContent = step === "login" ? "输入密码" : step === "setup" ? "创建账号" : "输入手机号";
     startForm.hidden = step !== "start";
     loginForm.hidden = step !== "login";
     setupForm.hidden = step !== "setup";
