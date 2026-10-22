@@ -7,7 +7,7 @@ import { WEATHER_CODES } from '../config.js';
 let selection=readBotanicalCache();
 function plantMarkup(plant) {
  if(!plant)return '<p class="desktop-plant-line">正在找一株花草…</p>';
- return `<figure><img src="${esc(plant.image)}" alt="${esc(plant.title)}" width="1200" height="800" referrerpolicy="no-referrer"><figcaption><h3>${esc(plant.title)}</h3><p>${esc(plant.summary)}</p><details><summary>资料与图片来源</summary><p><a href="${esc(plant.source)}" target="_blank" rel="noopener noreferrer">知识摘要：维基百科（经 iNaturalist 获取）</a> · CC BY-SA</p><p><a href="${esc(plant.imageSource)}" target="_blank" rel="noopener noreferrer">${esc(plant.author)}</a> · <a href="${esc(plant.licenseUrl)}" target="_blank" rel="noopener noreferrer">${esc(plant.license)}</a>；界面裁切展示。</p></details></figcaption></figure>`;
+ return `<figure><a class="desktop-photo" href="${esc(plant.image)}" target="_blank" rel="noopener noreferrer" aria-label="查看${esc(plant.title)}完整图片"><img src="${esc(plant.image)}" alt="${esc(plant.title)}" width="1200" height="800" referrerpolicy="no-referrer"></a><small class="desktop-photo-hint">点击查看完整图片 ↗</small><figcaption><h3>${esc(plant.title)}</h3><p>${esc(plant.summary)}</p><details><summary>资料与图片来源</summary><p><a href="${esc(plant.source)}" target="_blank" rel="noopener noreferrer">知识摘要：维基百科（经 iNaturalist 获取）</a> · CC BY-SA</p><p><a href="${esc(plant.imageSource)}" target="_blank" rel="noopener noreferrer">${esc(plant.author)}</a> · <a href="${esc(plant.licenseUrl)}" target="_blank" rel="noopener noreferrer">${esc(plant.license)}</a>；按原始比例完整展示。</p></details></figcaption></figure>`;
 }
 export function setupDesktop(root) {
  const stack=root.querySelector('.overview-stack');
