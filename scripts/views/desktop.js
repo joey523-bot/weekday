@@ -25,7 +25,7 @@ export function setupDesktop(root) {
   if(!force&&selection?.day===botanicalDay()){paint();if(selection.cached)status.textContent='最近收集的花草 · '+(selection.collectedAt||'');return;}
   busy=true;button.disabled=true;status.textContent='正在联网寻找花草…';
   try{selection=await fetchBotanical(selection?.plant.title||'');paint();status.textContent=selection.cached?'资料源暂忙，先看看最近收集的花草。':selection.persisted?'今天再次打开会保留这一株。':'已更新，浏览器暂时无法保存。';}
-  catch{if(selection){paint();status.textContent='暂时连接不上，先看看上次留下的花草。';}else{body.innerHTML='<p class="desktop-plant-line">花草资料暂不可用</p><p>稍后点“换一株”再试试。</p>';status.textContent='稍后再试，也可以先看看天气和月亮。';}}
+  catch(error){if(selection){paint();status.textContent=error.code==='NO_UNSEEN_PLANTS'?error.message:'暂时连接不上，先看看上次留下的花草。';}else{body.innerHTML='<p class="desktop-plant-line">花草资料暂不可用</p><p>稍后点“换一株”再试试。</p>';status.textContent='稍后再试，也可以先看看天气和月亮。';}}
   finally{busy=false;button.disabled=false;}
  }
  paint();button.addEventListener('click',()=>load(true));

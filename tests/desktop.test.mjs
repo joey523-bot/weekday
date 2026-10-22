@@ -17,3 +17,13 @@ test('first open during rate limit returns attributed real recovery content; sha
  global.fetch=async()=>{calls++;return new Response('',{status:429})};
  try{const first=await onRequestGet({request:new Request('https://test/api/botanical/today')});const a=await first.json();assert.equal(first.status,200);assert.equal(a.cached,true);assert.ok(validPlant(a.plant));assert.ok(a.collectedAt);const next=await onRequestGet({request:new Request('https://test/api/botanical/today?exclude='+encodeURIComponent(a.plant.title))});const b=await next.json();assert.notEqual(a.plant.title,b.plant.title);assert.equal(calls,1);}finally{global.fetch=oldFetch;global.caches=oldCaches;}
 });
+
+test('continuous browsing excludes history and reports exhaustion instead of silently repeating',async()=>{
+ const oldFetch=global.fetch,oldCaches=global.caches;
+ const pool=Array.from({length:12},(_,i)=>({...plant,title:'植物'+i,recordSource:'https://www.inaturalist.org/taxa/'+(1000+i)}));
+ global.caches={default:{match:async key=>key.url.includes('online-pool-v3')?Response.json({plants:pool,savedAt:Date.now(),date:'2026-10-21'}):undefined,put:async()=>{}}};global.fetch=async()=>new Response('',{status:429});
+ const {recoveryPlants:initial}=await import('../functions/_utils/botanical-cache.js');const seen=initial.map(p=>'inat:'+p.recordSource.split('/').at(-1));try{for(let i=0;i<12;i++){const r=await onRequestGet({request:new Request('https://test/api/botanical/today?seen='+encodeURIComponent(JSON.stringify(seen)))});const {plant:p}=await r.json();assert.ok(p);const key='inat:'+p.recordSource.split('/').at(-1);assert.ok(!seen.includes(key));seen.push(key);} // Recovery records remain eligible until viewed too.
+ const {recoveryPlants}=await import('../functions/_utils/botanical-cache.js');seen.push(...recoveryPlants.map(p=>'inat:'+p.recordSource.split('/').at(-1)));
+ const last=await onRequestGet({request:new Request('https://test/api/botanical/today?seen='+encodeURIComponent(JSON.stringify(seen)))});assert.equal(last.status,409);assert.equal((await last.json()).code,'NO_UNSEEN_PLANTS');
+ }finally{global.fetch=oldFetch;global.caches=oldCaches;}
+});
