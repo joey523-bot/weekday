@@ -21,4 +21,10 @@ await page.locator('.desktop-nav [data-switch-view=settings]').click();check(awa
 await page.locator('.desktop-moon [data-open-dialog]').click();check(await page.locator('#moonDetailDialog').isVisible(),'desktop moon details');await page.locator('#moonDetailDialog [data-close-dialog]').click();
 for(const width of [1100,1440,1920]){await page.setViewportSize({width,height:1000});check(!await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'desktop no overflow '+width);}
 await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'/private/tmp/desktop-implemented.png',fullPage:true});
-await page.setViewportSize({width:390,height:844});check(!await page.locator('.desktop-botanical').isVisible(),'phone hides desktop');check(await page.locator('.bottom-tabs').isVisible(),'phone tabs intact');console.log('desktop checks',checks);await browser.close();})();
+await page.setViewportSize({width:390,height:844});check(!await page.locator('.desktop-botanical').isVisible(),'phone hides desktop');check(await page.locator('.bottom-tabs').isVisible(),'phone tabs intact');await page.setViewportSize({width:1440,height:1000});
+const pages=page.context().pages().length;
+await page.locator('.desktop-photo').click();check(await page.locator('.botanical-preview').isVisible(),'in-app image opens');check(page.context().pages().length===pages,'no new browser tab');
+await page.keyboard.press('Escape');check(!await page.locator('.botanical-preview').isVisible(),'escape closes');check(await page.locator('.desktop-photo').evaluate(e=>e===document.activeElement),'focus returns');
+await page.locator('.desktop-photo').click();await page.locator('[data-close-preview]').click();check(!await page.locator('.botanical-preview').isVisible(),'close button');
+await page.locator('.desktop-photo').click();await page.mouse.click(2,2);check(!await page.locator('.botanical-preview').isVisible(),'backdrop closes');
+console.log('desktop checks',checks);await browser.close();})();

@@ -7,7 +7,7 @@ import { WEATHER_CODES } from '../config.js';
 let selection=readBotanicalCache();
 function plantMarkup(plant) {
  if(!plant)return '<p class="desktop-plant-line">正在找一株花草…</p>';
- return `<figure><a class="desktop-photo" href="${esc(plant.image)}" target="_blank" rel="noopener noreferrer" aria-label="查看${esc(plant.title)}完整图片"><img src="${esc(plant.image)}" alt="${esc(plant.title)}" width="1200" height="800" referrerpolicy="no-referrer"></a><small class="desktop-photo-hint">点击查看完整图片 ↗</small><figcaption><h3>${esc(plant.title)}</h3><p>${esc(plant.summary)}</p><details><summary>资料与图片来源</summary><p><a href="${esc(plant.source)}" target="_blank" rel="noopener noreferrer">知识摘要：维基百科（经 iNaturalist 获取）</a> · CC BY-SA</p><p><a href="${esc(plant.imageSource)}" target="_blank" rel="noopener noreferrer">${esc(plant.author)}</a> · <a href="${esc(plant.licenseUrl)}" target="_blank" rel="noopener noreferrer">${esc(plant.license)}</a>；按原始比例完整展示。</p></details></figcaption></figure>`;
+ return `<figure><button type="button" class="desktop-photo" aria-label="查看${esc(plant.title)}完整图片"><img src="${esc(plant.image)}" alt="${esc(plant.title)}" width="1200" height="800" referrerpolicy="no-referrer"></button><small class="desktop-photo-hint">点击放大查看</small><figcaption><h3>${esc(plant.title)}</h3><p>${esc(plant.summary)}</p><details><summary>资料与图片来源</summary><p><a href="${esc(plant.source)}" target="_blank" rel="noopener noreferrer">知识摘要：维基百科（经 iNaturalist 获取）</a> · CC BY-SA</p><p><a href="${esc(plant.imageSource)}" target="_blank" rel="noopener noreferrer">${esc(plant.author)}</a> · <a href="${esc(plant.licenseUrl)}" target="_blank" rel="noopener noreferrer">${esc(plant.license)}</a>；按原始比例完整展示。</p></details></figcaption></figure>`;
 }
 export function setupDesktop(root) {
  const stack=root.querySelector('.overview-stack');
@@ -15,6 +15,15 @@ export function setupDesktop(root) {
  const weather=document.createElement('article');weather.className='desktop-only desktop-weather desktop-card';weather.innerHTML='<header><h2>接下来的天气</h2><button type="button" data-switch-view="weather">查看详情 ›</button></header><div id="desktopWeatherBody"></div>';stack.append(weather);
  const moon=document.createElement('article');moon.className='desktop-only desktop-moon desktop-card';moon.innerHTML='<header><h2>今晚的月亮</h2><button type="button" data-open-dialog="moonDetailDialog">详情 ›</button></header><div id="desktopMoonBody"></div>';stack.append(moon);
  const nav=document.createElement('nav');nav.className='desktop-only desktop-nav';nav.setAttribute('aria-label','桌面导航');nav.innerHTML='<button type="button" data-switch-view="overview">回到首页</button><button type="button" data-switch-view="settings">设置</button>';root.querySelector('.app-header').append(nav);
+ const preview=document.createElement('dialog');preview.className='botanical-preview';preview.setAttribute('aria-labelledby','botanicalPreviewTitle');preview.innerHTML='<header><h2 id="botanicalPreviewTitle"></h2><button type="button" data-close-preview aria-label="关闭图片预览" autofocus>×</button></header><img alt="" referrerpolicy="no-referrer"><p role="status"></p>';root.append(preview);
+ let previewTrigger;
+ panel.addEventListener('click',event=>{const trigger=event.target.closest('.desktop-photo');if(!trigger||!selection?.plant)return;previewTrigger=trigger;preview.querySelector('h2').textContent=selection.plant.title;const image=preview.querySelector('img');image.alt=selection.plant.title;preview.querySelector('[role=status]').textContent='';image.onerror=()=>preview.querySelector('[role=status]').textContent='图片暂时加载失败，请关闭后再试。';image.src=selection.plant.image;preview.showModal();});
+ preview.querySelector('[data-close-preview]').addEventListener('click',()=>preview.close());
+ let backdropDown=false;
+ const outside=event=>{const r=preview.getBoundingClientRect();return event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom;};
+ preview.addEventListener('pointerdown',event=>backdropDown=event.target===preview&&outside(event));
+ preview.addEventListener('click',event=>{if(backdropDown&&event.target===preview&&outside(event))preview.close();backdropDown=false;});
+ preview.addEventListener('close',()=>previewTrigger?.isConnected&&previewTrigger.focus({preventScroll:true}));
  const body=panel.querySelector('[data-plant-body]'),status=panel.querySelector('[role=status]'),button=panel.querySelector('[data-next-plant]');
  const heading=root.querySelector('#homeItemsTitle');
  const layoutLabel=()=>{heading.textContent=window.matchMedia('(min-width:1100px)').matches?'别忘了':'当前事项';};layoutLabel();window.matchMedia('(min-width:1100px)').addEventListener('change',layoutLabel);
