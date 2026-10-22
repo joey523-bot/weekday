@@ -328,6 +328,7 @@ export function createShell() {
                 </div>
                 <span id="accountStatusBadge" class="soft-chip">已登录</span>
               </div>
+              <button type="button" class="button button--secondary" data-recovery-admin hidden>密码找回管理</button>
               <p id="accountUsername" class="form-note">--</p>
               <form id="changePasswordForm" class="stack-form">
                 <label class="field">
@@ -343,7 +344,7 @@ export function createShell() {
                   <input id="newPasswordConfirmInput" class="input" type="password" autocomplete="new-password" required />
                 </label>
                 <button class="button button--secondary" type="submit">修改密码</button>
-                <p id="changePasswordState" class="form-note" aria-live="polite">密码不支持找回，请妥善保管。</p>
+                <p id="changePasswordState" class="form-note" aria-live="polite">忘记密码时可申请管理员协助找回。</p>
               </form>
               <button id="logoutButton" class="button button--danger button--block" type="button">退出登录并清除此设备数据</button>
             </article>
@@ -390,6 +391,7 @@ export function createAuthShell() {
       </section>
       <section class="auth-card" aria-label="账号登录与注册">
         <div class="auth-card__head"><p>开启星期</p><h2>输入手机号</h2></div>
+        <button type="button" class="button button--secondary" data-open-recovery>忘记密码</button>
         <form id="accountStartForm" class="stack-form auth-form">
           <p class="auth-form__hint">输入手机号后，我们会自动带你进入登录或创建账号流程。</p>
           <label class="field"><span class="field__label">手机号</span><input id="accountPhoneInput" class="input" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="请输入 11 位手机号" required /></label>
@@ -402,7 +404,7 @@ export function createAuthShell() {
           <p class="auth-phone" data-account-phone>--</p>
           <label class="field"><span class="field__label">密码</span><input id="loginPassword" class="input" type="password" autocomplete="current-password" required /></label>
           <button class="button button--primary button--block" type="submit">进入星期</button>
-          <p id="loginState" class="form-note" aria-live="polite">密码暂不支持找回。</p>
+          <p id="loginState" class="form-note" aria-live="polite">忘记密码时可申请管理员协助找回。</p>
         </form>
         <form id="accountSetupForm" class="stack-form auth-form" hidden>
           <button class="auth-back" data-auth-back type="button">‹ 更换手机号</button>
@@ -412,7 +414,7 @@ export function createAuthShell() {
           <label class="field"><span class="field__label">设置密码</span><input id="setupPassword" class="input" type="password" autocomplete="new-password" required /></label>
           <label class="field"><span class="field__label">确认密码</span><input id="setupPasswordConfirm" class="input" type="password" autocomplete="new-password" required /></label>
           <button class="button button--primary button--block" type="submit">创建账号并开启星期</button>
-          <p id="setupState" class="form-note" aria-live="polite">密码暂不支持找回，请自行保存。</p>
+          <p id="setupState" class="form-note" aria-live="polite">请妥善保存密码；忘记时可申请管理员协助找回。</p>
         </form>
       </section>
     </main>

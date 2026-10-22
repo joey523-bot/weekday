@@ -1,3 +1,4 @@
+import { setupRecovery } from "./views/recovery.js";
 import { setupClockout } from "./views/clockout.js";
 import { updateClockout } from "./state.js";
 let clockoutUI;
@@ -119,6 +120,7 @@ async function boot() {
   if (!session?.user) {
     applyTheme(DEFAULT_THEME);
     root.innerHTML = createAuthShell();
+    setupRecovery(root);
     bindAuthEvents(root);
     return;
   }
@@ -133,6 +135,7 @@ async function startApplication(root) {
   suggestionUI = null;
   applyTheme(getState().preferences.theme);
   root.innerHTML = createShell();
+  setupRecovery(root);
   setupLifestyle(root);
   clockoutUI=setupClockout(root,{getState,save:updateClockout,sync:flushAccountSync});
 
