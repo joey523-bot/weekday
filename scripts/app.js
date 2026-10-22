@@ -1185,6 +1185,7 @@ function bindReminderNavigation(refs) {
         ? hasMultipleTimes(reminder.repeat) ? '当天已完成并同步。当天只记一条完成历史，剩余提醒继续按计划进行。' : reminder.repeat.mode === 'fixed' ? '本次已完成并同步。固定周期继续按计划提醒，完成记录不会改变后续安排。' : '本次已完成并同步。下一期按完成后的间隔安排。'
         : "事项已完成并同步。";
       if (pushError) { button.textContent = "重试提醒同步"; button.disabled = false; }
+      else dialog.close();
     } catch(error) {
       if (detailReminderId !== id) return;
       status.textContent = `本次操作尚未同步：${error.message}`;
@@ -1268,6 +1269,7 @@ async function openReminderDetail(refs, id, { consumeRoute = false, occurrenceDa
     if (!navigator.onLine) throw new Error("当前离线，无法核对提醒事项。联网后重新点击通知或刷新重试。");
     const remote = await loadAccountSnapshot();
     if (version !== routeVersion) return;
+    if (!remote.snapshot) throw new Error("云端事项尚未初始化，已保留本机事项，请稍后重试。");
     // Resolve only against the authenticated account, never a stale local cache.
     if (accountDirty) throw new Error("本机仍有修改正在保存，请稍后重新打开提醒。");
     accountSyncPaused = true;

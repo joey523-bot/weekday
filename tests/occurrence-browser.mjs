@@ -28,7 +28,7 @@ const reminder = (id, title) => ({ id, title, date: '2026-10-03', category: '其
 async function scenario(name, run, { loggedIn = true } = {}) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Shanghai', serviceWorkers: 'allow' });
   let snapshot = { ...structuredClone(DEFAULT_STATE), reminders: [reminder('r1', '测试事项一'), reminder('r2', '测试事项二')] };
-  let revision = 1, failSave = false, failLoad = false, conflict = false;
+  let revision = 1, failSave = false, failLoad = false, conflict = false, incompleteLoad = false;
   const errors = [];
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -44,7 +44,7 @@ async function scenario(name, run, { loggedIn = true } = {}) {
         else if (conflict) { status = 409; payload = { conflict: true, revision: revision + 1, snapshot }; }
         else { snapshot = route.request().postDataJSON().snapshot; revision++; payload = { revision }; }
       } else if (failLoad) { status = 503; payload = { error: '模拟加载失败' }; }
-      else payload = { snapshot, revision };
+      else payload = incompleteLoad ? {} : { snapshot, revision };
     } else { status = 503; payload = { error: '模拟环境未启用推送/天气' }; }
     return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) });
   });
@@ -53,7 +53,7 @@ async function scenario(name, run, { loggedIn = true } = {}) {
   page.on('pageerror', e => errors.push(e.message));
   try {
     await run(page, {
-      snapshot: () => snapshot,
+      snapshot: () => snapshot, incompleteLoad: value => { incompleteLoad = value; },
       failSave: value => { failSave = value; }, failLoad: value => { failLoad = value; }, conflict: value => { conflict = value; },
       replace: value => { snapshot = value; revision++; }
     });
@@ -95,8 +95,27 @@ try {
   await page.goto(origin+'/#reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
   await page.click('#reminderDetailComplete');await page.keyboard.press('Escape');assert.equal(api.snapshot().reminders[0].completed,false);
   await page.click('#reminderDetailComplete');await page.fill('#occurrenceDate','2026-07-23');await page.click('#occurrenceSubmit');
-  await page.getByText('事项已完成并同步。',{exact:true}).waitFor();assert.equal(api.snapshot().reminders[0].occurredOn,'2026-07-23');
+  await page.waitForFunction(()=>!document.querySelector('#reminderDetail').open);assert.equal(api.snapshot().reminders[0].occurredOn,'2026-07-23');
   assert.equal(await page.locator('#snoozePanel').isVisible(),false);
+ });
+ await scenario('failed completion sync keeps detail open and retry closes it',async(page,api)=>{
+  await page.goto(origin+'/#reminder=r1');await page.locator('#reminderDetail[open]').waitFor();
+  api.failSave(true);await page.click('#reminderDetailComplete');await page.click('#occurrenceSubmit');
+  await page.locator('#reminderDetailState').filter({hasText:'本次操作尚未同步'}).waitFor();
+  assert.equal(await page.locator('#reminderDetail').isVisible(),true);
+  api.failSave(false);await page.click('#reminderDetailComplete');
+  await page.waitForFunction(()=>!document.querySelector('#reminderDetail').open);
+  assert.equal(api.snapshot().reminders[0].completed,true);
+ });
+ await scenario('incomplete detail response preserves existing reminders',async(page,api)=>{
+  await board(page);api.incompleteLoad(true);
+  await page.locator('#reminderList [data-reminder-detail="r1"] .reminder-item__body').click();
+  await page.locator('#reminderBoardState').filter({hasText:'账号同步响应不完整'}).waitFor();
+  assert.match(await page.locator('#reminderList').innerText(),/测试事项一/);
+  assert.equal(api.snapshot().reminders.length,2);
+  api.incompleteLoad(false);
+  await page.locator('#reminderList [data-reminder-detail="r1"] .reminder-item__body').click();
+  await page.locator('#reminderDetail[open]').waitFor();
  });
  console.log(`Passed ${count} occurrence scenarios`);
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

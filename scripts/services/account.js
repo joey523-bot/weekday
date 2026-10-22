@@ -29,7 +29,14 @@ export async function changeAccountPassword({ currentPassword, newPassword }) {
 
 export async function loadAccountSnapshot() {
   const response = await fetch(SYNC_ENDPOINT, { credentials: "same-origin", headers: { Accept: "application/json" } });
-  return readResponse(response);
+  const payload = await readResponse(response);
+  if (!Number.isInteger(payload?.revision) || payload.revision < 0
+      || !Object.hasOwn(payload, "snapshot")
+      || (payload.snapshot !== null && !Array.isArray(payload.snapshot?.reminders))
+      || (payload.snapshot === null && payload.revision !== 0)) {
+    throw new Error("账号同步响应不完整，已保留本机事项，请稍后重试。");
+  }
+  return payload;
 }
 
 export async function saveAccountSnapshot(snapshot, baseRevision) {
